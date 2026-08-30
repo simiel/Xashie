@@ -10,7 +10,8 @@ export default function AppTabs() {
       <TabSlot />
       <TabList asChild>
         <View className="flex-row justify-around border-t border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-950">
-          <WebTab href="/" label={text.home} />
+          <WebTab href="/home" label={text.home} />
+          <WebTab href="/chat" label="Chat" />
           <WebTab href="/learn" label={text.learn} />
           <WebTab href="/support" label={text.support} />
           <WebTab href="/settings" label={text.settings} />
@@ -20,7 +21,7 @@ export default function AppTabs() {
   );
 }
 
-function WebTab({ href, label }: { href: '/' | '/learn' | '/support' | '/settings'; label: string }) {
+function WebTab({ href, label }: { href: '/home' | '/chat' | '/learn' | '/support' | '/settings'; label: string }) {
   return (
     <TabTrigger href={href} name={label} asChild>
       <Pressable accessibilityRole="tab" className="min-h-11 justify-center rounded-xl px-3">
