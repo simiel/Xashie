@@ -165,6 +165,20 @@ Do not treat automated accessibility scans as sufficient. Test critical flows ma
 
 ## 9. AI provider architecture
 
+### Current intelligence gateway
+
+Before doing any provider, chat, language, authentication, streaming, or voice work, read the canonical gateway reference: [HASHIE_LLM_GATEWAY.md](HASHIE_LLM_GATEWAY.md).
+
+The current Hashie intelligence gateway is:
+
+```text
+https://hashie-llm-openai-gateway-5bq6okiwgq-ew.a.run.app
+```
+
+Use it through a provider-neutral backend adapter. The OpenAI-compatible chat base URL is the gateway URL plus `/v1`; auth routes remain at the gateway root. Map Hashie's client language codes at the backend boundary: `en -> eng` and `tw -> akh`. The gateway's `eng` route uses `hashie-medgemma`; its documented `akh` route uses `hashie-sunflower` but is not production-ready until its live timeout and Akan quality issues are resolved.
+
+The gateway is not a Clerk provider and does not expose speech-to-text or text-to-speech. Never call it directly from web/mobile clients, create a second user-password identity system, expose gateway tokens, or claim that its Akan text model provides Akan speech. Separate speech adapters and a safe server-side auth contract are required before production integration.
+
 Use provider-neutral interfaces for:
 
 - Reasoning and streaming text.
