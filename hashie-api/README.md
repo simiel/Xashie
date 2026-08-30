@@ -31,6 +31,11 @@ GET http://localhost:4000/ready
 GET http://localhost:4000/docs
 ```
 
+The first chat slice is available at `POST /v1/conversations/:id/messages`.
+It accepts `{ content, language, ageGroup }` and returns an authenticated SSE
+stream. Conversation creation/list/detail and message feedback are also
+backend-owned; clients never call the intelligence gateway directly.
+
 The first database-backed route is `GET/PATCH /v1/me`. It requires a valid
 Clerk bearer token and stores only the user ID, role snapshot, and onboarding
 profile fields defined in the schema.

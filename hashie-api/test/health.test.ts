@@ -25,6 +25,14 @@ describe('health routes', () => {
       gatewayUrl: 'http://localhost:9999/v1',
       gatewayToken: undefined,
       gatewayEnabled: false,
+      gatewayTimeoutMs: 15_000,
+      gatewayMaxRetries: 2,
+      akanTimeoutMs: 30_000,
+      requestBodyLimitBytes: 1_048_576,
+      rateLimitMax: 60,
+      rateLimitWindowMs: 60_000,
+      clerkWebhookSigningSecret: undefined,
+      retentionDays: 30,
     } });
 
     const response = await app.inject({ method: 'GET', url: '/health' });
@@ -47,6 +55,14 @@ describe('health routes', () => {
       gatewayUrl: 'http://localhost:9999/v1',
       gatewayToken: undefined,
       gatewayEnabled: false,
+      gatewayTimeoutMs: 15_000,
+      gatewayMaxRetries: 2,
+      akanTimeoutMs: 30_000,
+      requestBodyLimitBytes: 1_048_576,
+      rateLimitMax: 60,
+      rateLimitWindowMs: 60_000,
+      clerkWebhookSigningSecret: undefined,
+      retentionDays: 30,
     } });
 
     const response = await app.inject({ method: 'GET', url: '/ready' });

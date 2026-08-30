@@ -3,6 +3,8 @@ import fp from 'fastify-plugin';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 
 import type { AppConfig } from '../config/env.js';
+import type { DatabaseHandle } from '../db/client.js';
+import { UserRepository } from '../db/repositories.js';
 
 export type HashieRole = 'user' | 'admin' | 'super_admin' | 'content_reviewer' | 'support_agent' | 'auditor';
 
@@ -35,20 +37,24 @@ function readRole(claims: Record<string, unknown>): HashieRole {
   return 'user';
 }
 
-export function authPlugin(): FastifyPluginAsync {
+export function authPlugin(options: { database?: DatabaseHandle } = {}): FastifyPluginAsync {
   return fp(async app => {
     app.decorateRequest('auth', null);
+    app.decorate('userRepository', options.database ? new UserRepository(options.database) : undefined);
   });
 }
 
-async function authenticateRequest(config: AppConfig, request: FastifyRequest, reply: FastifyReply) {
+declare module 'fastify' { interface FastifyInstance { userRepository: UserRepository | undefined; } }
+
+async function authenticateRequest(config: AppConfig, request: FastifyRequest, reply: FastifyReply, repository: UserRepository | undefined) {
   const token = getBearerToken(request.headers.authorization);
   if (!token || (!config.clerkSecretKey && !config.clerkJwtKey)) {
     return reply.code(401).send({ error: { code: 'unauthorized', message: 'Authentication is required.' } });
   }
 
+  let claims;
   try {
-    const claims = await verifyToken(token, {
+    claims = await verifyToken(token, {
       secretKey: config.clerkSecretKey,
       jwtKey: config.clerkJwtKey,
       audience: config.clerkAudience,
@@ -56,19 +62,18 @@ async function authenticateRequest(config: AppConfig, request: FastifyRequest, r
     });
     const userId = claims.sub;
     if (!userId) throw new Error('Token is missing a subject.');
-    request.auth = {
-      userId,
-      sessionId: claims.sid,
-      role: readRole(claims as unknown as Record<string, unknown>),
-    };
   } catch {
     return reply.code(401).send({ error: { code: 'unauthorized', message: 'Authentication is required.' } });
   }
+  const userId = claims.sub;
+  if (!userId) return reply.code(401).send({ error: { code: 'unauthorized', message: 'Authentication is required.' } });
+  request.auth = { userId, sessionId: claims.sid, role: readRole(claims as unknown as Record<string, unknown>) };
+  try { await repository?.ensure(userId, request.auth.role); } catch { return reply.code(503).send({ error: { code: 'database_unavailable', message: 'Authentication is temporarily unavailable.', requestId: request.correlationId } }); }
 }
 
 export function requireAuth(config: AppConfig): preHandlerHookHandler {
   return async (request, reply) => {
-    await authenticateRequest(config, request, reply);
+    await authenticateRequest(config, request, reply, request.server.userRepository);
   };
 }
 

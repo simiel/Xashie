@@ -12,6 +12,14 @@ export type AppConfig = {
   gatewayUrl: string;
   gatewayToken: string | undefined;
   gatewayEnabled: boolean;
+  gatewayTimeoutMs: number;
+  gatewayMaxRetries: number;
+  akanTimeoutMs: number;
+  requestBodyLimitBytes: number;
+  rateLimitMax: number;
+  rateLimitWindowMs: number;
+  clerkWebhookSigningSecret: string | undefined;
+  retentionDays: number;
 };
 
 function optional(value: string | undefined) {
@@ -51,5 +59,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     gatewayUrl: env.HASHIE_GATEWAY_URL ?? 'https://hashie-llm-openai-gateway-5bq6okiwgq-ew.a.run.app/v1',
     gatewayToken: optional(env.HASHIE_GATEWAY_TOKEN),
     gatewayEnabled: env.HASHIE_GATEWAY_ENABLED === 'true',
+    gatewayTimeoutMs: Number(env.HASHIE_GATEWAY_TIMEOUT_MS ?? 15_000),
+    gatewayMaxRetries: Number(env.HASHIE_GATEWAY_MAX_RETRIES ?? 2),
+    akanTimeoutMs: Number(env.HASHIE_AKAN_TIMEOUT_MS ?? 30_000),
+    requestBodyLimitBytes: Number(env.REQUEST_BODY_LIMIT_BYTES ?? 1_048_576),
+    rateLimitMax: Number(env.RATE_LIMIT_MAX ?? 60),
+    rateLimitWindowMs: Number(env.RATE_LIMIT_WINDOW_MS ?? 60_000),
+    clerkWebhookSigningSecret: optional(env.CLERK_WEBHOOK_SIGNING_SECRET),
+    retentionDays: Number(env.RETENTION_DAYS ?? 30),
   };
 }

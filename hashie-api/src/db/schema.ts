@@ -115,6 +115,22 @@ export const idempotencyKeys = pgTable('idempotency_keys', {
   ownerKeyUnique: uniqueIndex('idempotency_keys_owner_key_unique').on(table.clerkUserId, table.key),
 }));
 
+export const feedback = pgTable('feedback', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  clerkUserId: text('clerk_user_id').notNull(),
+  messageId: uuid('message_id').references(() => messages.id, { onDelete: 'cascade' }),
+  rating: integer('rating').notNull(),
+  comment: text('comment'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ userCreatedIndex: index('feedback_user_created_idx').on(table.clerkUserId, table.createdAt) }));
+
+export const webhookEvents = pgTable('webhook_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  eventId: text('event_id').notNull(),
+  eventType: text('event_type').notNull(),
+  processedAt: timestamp('processed_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => ({ eventUnique: uniqueIndex('webhook_events_event_id_unique').on(table.eventId) }));
+
 export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(userProfiles),
   conversations: many(conversations),

@@ -104,4 +104,11 @@ export async function registerUserRoutes(app: FastifyInstance, config: AppConfig
 
     return { userId: result.user.clerkUserId, role: result.user.roleSnapshot, profile: result.profile };
   });
+
+  app.delete('/v1/me', { preHandler: requireAuth(config), schema: { response: { 204: Type.Null(), 401: errorResponse, 503: errorResponse } } }, async (request, reply) => {
+    if (!request.auth) return reply.code(401).send({ error: { code: 'unauthorized', message: 'Authentication is required.' } });
+    if (!app.userRepository) return reply.code(503).send({ error: { code: 'database_unavailable', message: 'The account service is temporarily unavailable.' } });
+    await app.userRepository.deleteByClerkUserId(request.auth.userId, request.correlationId);
+    return reply.code(204).send();
+  });
 }
