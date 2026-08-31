@@ -61,6 +61,7 @@ export const messages = pgTable('messages', {
   modelVersion: text('model_version'),
   policyVersion: text('policy_version'),
   retrievedContentIds: jsonb('retrieved_content_ids').$type<string[]>().notNull().default([]),
+  safetyResult: jsonb('safety_result').$type<{ decision: string; reasons: string[] }>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, table => ({
   conversationCreatedIndex: index('messages_conversation_created_idx').on(table.conversationId, table.createdAt),

@@ -8,5 +8,5 @@ export type ReviewedContentHit = {
 };
 
 export interface ReviewedContentRetriever {
-  search(input: { query: string; language: HashieLanguage; limit: number }): Promise<ReviewedContentHit[]>;
+  search(input: { query: string; topic?: string; language: HashieLanguage; limit: number }): Promise<ReviewedContentHit[]>;
 }

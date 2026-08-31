@@ -23,6 +23,7 @@ import { ConversationRepository } from './db/repositories.js';
 import { DatabaseReviewedContentRetriever } from './providers/retrieval/database.js';
 import type { ReviewedContentRetriever } from './providers/retrieval/types.js';
 import type { SafetyProvider } from './providers/safety/types.js';
+import { registerContentRoutes } from './modules/content/routes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -95,6 +96,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await registerWebhookRoutes(app, config);
   await registerFeedbackRoutes(app, config);
   await registerConversationRoutes(app, config);
+  await registerContentRoutes(app, config);
 
   app.setErrorHandler((error, request, reply) => {
     const safeError = error as { validation?: unknown; statusCode?: number; code?: string };

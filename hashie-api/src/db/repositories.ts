@@ -1,4 +1,4 @@
-import { and, eq, ilike, lt, or } from 'drizzle-orm';
+import { and, eq, gt, ilike, isNull, lt, or } from 'drizzle-orm';
 import { auditEvents, conversations, feedback, idempotencyKeys, messages, reviewedContent, userProfiles, users } from './schema.js';
 import type { DatabaseHandle } from './client.js';
 
@@ -31,7 +31,19 @@ export class ConversationRepository {
   addMessage(message: typeof messages.$inferInsert) { return this.database.db.insert(messages).values(message).returning(); }
   touch(conversationId: string) { return this.database.db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId)); }
   profile(userId: string) { return this.database.db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1); }
-  reviewed(language: 'en' | 'tw', query: string, limit = 5) { const term = `%${query.slice(0, 200)}%`; return this.database.db.select({ id: reviewedContent.id, title: reviewedContent.title, body: reviewedContent.body, source: reviewedContent.source }).from(reviewedContent).where(and(eq(reviewedContent.language, language), eq(reviewedContent.status, 'published'), or(ilike(reviewedContent.title, term), ilike(reviewedContent.body, term)))).limit(limit); }
+  reviewed(language: 'en' | 'tw', query: string, topic?: string, limit = 5) { const term = `%${query.slice(0, 200)}%`; const topicTerm = topic ? `%${topic.slice(0, 120)}%` : undefined; return this.database.db.select({ id: reviewedContent.id, title: reviewedContent.title, body: reviewedContent.body, source: reviewedContent.source }).from(reviewedContent).where(and(eq(reviewedContent.language, language), eq(reviewedContent.status, 'published'), or(isNull(reviewedContent.expiresAt), gt(reviewedContent.expiresAt, new Date())), topicTerm ? ilike(reviewedContent.topic, topicTerm) : undefined, or(ilike(reviewedContent.title, term), ilike(reviewedContent.body, term)))).limit(limit); }
+}
+
+export type ReviewedContentStatus = 'draft' | 'in_review' | 'approved' | 'published' | 'expired' | 'archived';
+export class ReviewedContentRepository {
+  constructor(private readonly database: DatabaseHandle) {}
+  list(input: { language?: 'en' | 'tw'; topic?: string; status?: ReviewedContentStatus }) {
+    return this.database.db.select().from(reviewedContent).where(and(input.language ? eq(reviewedContent.language, input.language) : undefined, input.topic ? ilike(reviewedContent.topic, `%${input.topic.slice(0, 120)}%`) : undefined, input.status ? eq(reviewedContent.status, input.status) : undefined, input.status === 'published' ? or(isNull(reviewedContent.expiresAt), gt(reviewedContent.expiresAt, new Date())) : undefined)).orderBy(reviewedContent.updatedAt);
+  }
+  get(id: string) { return this.database.db.select().from(reviewedContent).where(eq(reviewedContent.id, id)).limit(1); }
+  create(input: typeof reviewedContent.$inferInsert) { return this.database.db.insert(reviewedContent).values(input).returning(); }
+  update(id: string, input: Partial<typeof reviewedContent.$inferInsert>) { return this.database.db.update(reviewedContent).set({ ...input, updatedAt: new Date() }).where(eq(reviewedContent.id, id)).returning(); }
+  remove(id: string) { return this.database.db.update(reviewedContent).set({ status: 'archived', updatedAt: new Date() }).where(eq(reviewedContent.id, id)).returning({ id: reviewedContent.id, status: reviewedContent.status }); }
 }
 
 export class FeedbackRepository {
