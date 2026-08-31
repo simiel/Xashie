@@ -13,6 +13,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/drizzle ./drizzle
 USER node
 EXPOSE 4000
 CMD ["node", "dist/src/server.js"]
