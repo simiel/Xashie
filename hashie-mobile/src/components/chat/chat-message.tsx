@@ -48,8 +48,9 @@ export function ChatMessage({ message, largeText, voiceState, labels, disabled, 
   return (
     <View className={`w-full ${isUser ? 'items-end' : 'items-start'}`}>
       <View className={`max-w-[92%] gap-3 rounded-3xl px-4 py-3 ${isUser ? 'rounded-br-lg bg-sky-700 dark:bg-sky-600' : 'rounded-bl-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}>
-        {!isUser ? <Text selectable className="text-xs font-bold uppercase tracking-wide text-sky-800 dark:text-sky-300">Hashie · local preview</Text> : null}
+        {!isUser ? <Text selectable className="text-xs font-bold uppercase tracking-wide text-sky-800 dark:text-sky-300">Hashie · health support</Text> : null}
         <MessageBody text={message.text} largeText={largeText} isUser={isUser} />
+        {message.safetyEscalated ? <Text selectable accessibilityRole="alert" className="text-xs font-semibold text-amber-800 dark:text-amber-200">Safety guidance</Text> : null}
         {message.status === 'cancelled' ? <Text selectable className="text-xs font-semibold text-amber-700 dark:text-amber-300">{labels.cancelled}</Text> : null}
         {isUser ? null : (
           <View className="gap-2 border-t border-slate-200 pt-2 dark:border-slate-700">

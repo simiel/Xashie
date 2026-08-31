@@ -43,7 +43,7 @@ export function ChatComposer({ draftText, isGenerating, isClearing, placeholder,
           {isGenerating ? (
             <Pressable
               accessibilityLabel={stopLabel}
-              accessibilityHint="Stop the local mock response and keep any partial text"
+              accessibilityHint="Stop the response and keep any partial text"
               accessibilityRole="button"
               accessibilityState={{ disabled: isClearing, busy: true }}
               disabled={isClearing}

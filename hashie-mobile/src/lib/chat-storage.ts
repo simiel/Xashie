@@ -5,6 +5,7 @@ import type { ChatMessage } from './chat-state';
 const storagePrefix = 'hashie.mobile.chat.v1.owner-';
 const maxMessages = 16;
 const maxMessageCharacters = 1800;
+const draftPrefix = 'hashie.mobile.chat-draft.v1.owner-';
 
 function encodeOwner(owner: string) {
   return owner.split('').map(character => character.charCodeAt(0).toString(16).padStart(4, '0')).join('');
@@ -12,6 +13,19 @@ function encodeOwner(owner: string) {
 
 export function chatStorageKey(owner: string) {
   return `${storagePrefix}${encodeOwner(owner)}`;
+}
+
+export function chatDraftKey(owner: string) { return `${draftPrefix}${encodeOwner(owner)}`; }
+
+export async function readChatDraft(owner: string) {
+  try { return await SecureStore.getItemAsync(chatDraftKey(owner)) ?? ''; } catch { return ''; }
+}
+
+export async function writeChatDraft(owner: string, draft: string) {
+  try {
+    if (draft) await SecureStore.setItemAsync(chatDraftKey(owner), draft.slice(0, 4000));
+    else await SecureStore.deleteItemAsync(chatDraftKey(owner));
+  } catch { /* Draft persistence is best effort. */ }
 }
 
 function isChatMessage(value: unknown): value is ChatMessage {

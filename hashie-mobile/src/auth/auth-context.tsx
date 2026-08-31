@@ -105,6 +105,9 @@ export function AuthProfileProvider({ children }: PropsWithChildren) {
     await signOut();
   }, [signOut]);
 
+  const markSessionExpired = useCallback(() => setSessionExpired(true), []);
+  const clearSessionExpired = useCallback(() => setSessionExpired(false), []);
+
   const value: AuthProfileContextValue = {
     isReady: isLoaded && hydratedOwner === hydrationOwner,
     sessionType,
@@ -116,8 +119,8 @@ export function AuthProfileProvider({ children }: PropsWithChildren) {
     startGuestSession,
     endGuestSession,
     signOutAccount,
-    markSessionExpired: () => setSessionExpired(true),
-    clearSessionExpired: () => setSessionExpired(false),
+    markSessionExpired,
+    clearSessionExpired,
   };
 
   return <AuthProfileContext.Provider value={value}>{children}</AuthProfileContext.Provider>;

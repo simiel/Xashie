@@ -15,6 +15,8 @@ export type ChatMessage = {
   status: ChatMessageStatus;
   language: SupportedLanguage;
   isMock: boolean;
+  serverId?: string;
+  safetyEscalated?: boolean;
   feedback?: MessageFeedback;
 };
 
@@ -32,6 +34,7 @@ export type ChatState = {
   isGenerating: boolean;
   isStreaming: boolean;
   generationError: string | null;
+  generationErrorCode: 'timeout' | 'disconnected' | 'safety' | 'session' | 'offline' | 'unavailable' | null;
   activeMessageId: string | null;
   lastFailedMessage: FailedMessage | null;
   selectedLanguage: SupportedLanguage;
@@ -48,6 +51,7 @@ export const initialChatState = (selectedLanguage: SupportedLanguage, ageGroup: 
   isGenerating: false,
   isStreaming: false,
   generationError: null,
+  generationErrorCode: null,
   activeMessageId: null,
   lastFailedMessage: null,
   selectedLanguage,
@@ -65,9 +69,12 @@ export type ChatAction =
   | { type: 'add_message_pair'; userMessage: ChatMessage; assistantMessage: ChatMessage }
   | { type: 'begin_generation'; assistantMessageId: string }
   | { type: 'append_assistant_text'; assistantMessageId: string; text: string }
+  | { type: 'set_server_message_id'; assistantMessageId: string; serverId: string }
+  | { type: 'mark_safety_escalation'; assistantMessageId: string }
   | { type: 'complete_generation'; assistantMessageId: string }
   | { type: 'cancel_generation'; assistantMessageId: string; notice: string }
   | { type: 'fail_generation'; failedMessage: FailedMessage; message: string }
+  | { type: 'fail_generation_with_code'; failedMessage: FailedMessage; message: string; code: ChatState['generationErrorCode'] }
   | { type: 'retry_generation'; assistantMessageId: string }
   | { type: 'set_feedback'; messageId: string; feedback: MessageFeedback }
   | { type: 'set_voice_state'; voiceState: ChatVoiceState }
@@ -95,6 +102,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...state.messages, action.userMessage, action.assistantMessage],
         draftText: '',
         generationError: null,
+        generationErrorCode: null,
         lastFailedMessage: null,
         activeMessageId: action.assistantMessage.id,
       };
@@ -104,6 +112,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isGenerating: true,
         isStreaming: true,
         generationError: null,
+        generationErrorCode: null,
         activeMessageId: action.assistantMessageId,
         messages: state.messages.map(message =>
           message.id === action.assistantMessageId
@@ -127,6 +136,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isStreaming: false,
         activeMessageId: null,
         lastFailedMessage: null,
+        generationErrorCode: null,
         messages: state.messages.map(message =>
           message.id === action.assistantMessageId ? { ...message, status: 'complete' } : message,
         ),
@@ -138,6 +148,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isStreaming: false,
         activeMessageId: null,
         generationError: null,
+        generationErrorCode: null,
         messages: state.messages.map(message =>
           message.id === action.assistantMessageId
             ? { ...message, status: 'cancelled', text: message.text || action.notice }
@@ -151,6 +162,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isStreaming: false,
         activeMessageId: null,
         generationError: action.message,
+        generationErrorCode: 'unavailable',
         lastFailedMessage: action.failedMessage,
         messages: state.messages.map(message =>
           message.id === action.failedMessage.assistantMessageId
@@ -158,12 +170,24 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             : message,
         ),
       };
+    case 'fail_generation_with_code':
+      return {
+        ...state,
+        isGenerating: false,
+        isStreaming: false,
+        activeMessageId: null,
+        generationError: action.message,
+        generationErrorCode: action.code,
+        lastFailedMessage: action.failedMessage,
+        messages: state.messages.map(message => message.id === action.failedMessage.assistantMessageId ? { ...message, status: 'failed', text: action.message } : message),
+      };
     case 'retry_generation':
       return {
         ...state,
         isGenerating: true,
         isStreaming: true,
         generationError: null,
+        generationErrorCode: null,
         activeMessageId: action.assistantMessageId,
         messages: state.messages.map(message =>
           message.id === action.assistantMessageId ? { ...message, status: 'streaming', text: '' } : message,
@@ -177,6 +201,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           message.id === action.messageId ? { ...message, feedback: action.feedback } : message,
         ),
       };
+    case 'set_server_message_id':
+      return { ...state, messages: state.messages.map(message => message.id === action.assistantMessageId ? { ...message, serverId: action.serverId } : message) };
+    case 'mark_safety_escalation':
+      return { ...state, messages: state.messages.map(message => message.id === action.assistantMessageId ? { ...message, safetyEscalated: true } : message) };
     case 'set_voice_state':
       return { ...state, voiceState: action.voiceState };
     case 'set_clear_confirmation':

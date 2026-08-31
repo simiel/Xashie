@@ -29,8 +29,8 @@ export function chatText(language: SupportedLanguage) {
     return {
       title: 'Chat support',
       subtitle: 'A private place to learn and prepare questions.',
-      mockLabel: 'Local preview',
-      mockBody: 'Replies here are deterministic local previews, not from a live health service.',
+      mockLabel: 'Connected support',
+      mockBody: 'Responses come through Hashie support services and are not a diagnosis.',
       emptyTitle: 'What would you like to learn?',
       emptyBody: 'Ask a health question in your own words. Share only what feels comfortable.',
       suggestionsTitle: 'Try a prompt',
@@ -59,8 +59,8 @@ export function chatText(language: SupportedLanguage) {
   return {
     title: 'Chat support',
     subtitle: 'A private place to learn and prepare questions.',
-    mockLabel: 'Local preview',
-    mockBody: 'Replies here are deterministic local previews, not from a live health service.',
+    mockLabel: 'Connected support',
+    mockBody: 'Responses come through Hashie support services and are not a diagnosis.',
     emptyTitle: 'What would you like to learn?',
     emptyBody: 'Ask a health question in your own words. Share only what feels comfortable.',
     suggestionsTitle: 'Try a prompt',
