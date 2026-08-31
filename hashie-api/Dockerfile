@@ -2,7 +2,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN pnpm build
 
@@ -11,7 +11,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 USER node
