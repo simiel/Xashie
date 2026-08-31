@@ -1,6 +1,6 @@
 FROM node:22-alpine AS build
 WORKDIR /app
-ENV CI=true
+ENV CI=true PNPM_CONFIG_IGNORE_SCRIPTS=true
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
