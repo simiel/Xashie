@@ -15,7 +15,7 @@ export class HashieApiError extends Error {
 }
 
 export type ServerConversation = { id: string; userId: string; title: string | null; language: SupportedLanguage; createdAt: string; updatedAt: string };
-export type ServerMessage = { id: string; conversationId: string; role: 'user' | 'assistant'; content: string; language: SupportedLanguage; createdAt: string };
+export type ServerMessage = { id: string; conversationId: string; role: 'user' | 'assistant'; content: string; language: SupportedLanguage; safetyResult?: { decision: string; reasons: string[] } | null; createdAt: string };
 export type ServerConversationDetail = ServerConversation & { messages: ServerMessage[] };
 export type StreamEvent =
   | { type: 'started'; requestId?: string }

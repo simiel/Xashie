@@ -47,6 +47,7 @@ export default function ChatScreen() {
     retry: text.retry,
     cancelled: text.cancelled,
     typing: text.typing,
+    safetyGuidance: text.safetyGuidance,
   };
 
   return (

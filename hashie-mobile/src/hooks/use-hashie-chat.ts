@@ -39,6 +39,7 @@ function serverMessageToChatMessage(message: ServerMessage): ChatMessage {
     status: 'complete',
     language: message.language,
     isMock: false,
+    safetyEscalated: Boolean(message.safetyResult && message.safetyResult.decision !== 'allow'),
   };
 }
 
@@ -52,6 +53,11 @@ export function useHashieChat({ owner, language, ageGroup }: UseHashieChatOption
   const mountedRef = useRef(true);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const getTokenRef = useRef(getToken);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -76,7 +82,7 @@ export function useHashieChat({ owner, language, ageGroup }: UseHashieChatOption
     void (async () => {
       const localMessages = await readChatHistory(owner);
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) throw new HashieApiError('Your session has expired.', 401, 'unauthorized');
         const conversations = await hashieApi.listConversations(token);
         const latest = [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
@@ -96,7 +102,7 @@ export function useHashieChat({ owner, language, ageGroup }: UseHashieChatOption
       }
     })();
     return () => { active = false; };
-  }, [getToken, markSessionExpired, owner]);
+  }, [markSessionExpired, owner]);
 
   useEffect(() => {
     if (!owner || isHydrating) return;
