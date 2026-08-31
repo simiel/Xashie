@@ -1,16 +1,20 @@
 {
   "expo": {
     "name": "Hashie",
-    "slug": "hashie",
+    "owner": "simiel",
+    "slug": "xashie",
+    "description": "Private, accessible health education and support for Ghana.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hashie",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.xashie.hashie"
     },
     "android": {
+      "package": "com.xashie.hashie",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -39,6 +43,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c7915cdd-9654-41f0-aa21-b22863741cbe"
+      }
     }
   }
 }

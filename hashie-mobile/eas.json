@@ -1,0 +1,25 @@
+{
+  "cli": {
+    "version": ">= 16.0.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development"
+    },
+    "preview": {
+      "distribution": "internal",
+      "environment": "preview"
+    },
+    "production": {
+      "autoIncrement": true,
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_HASHIE_API_URL": "https://hashie-api-v2-239035662159.africa-south1.run.app",
+        "EXPO_PUBLIC_HASHIE_GUEST_MODE_ENABLED": "false"
+      }
+    }
+  }
+}
