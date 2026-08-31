@@ -2,7 +2,7 @@
 
 ## Production API
 
-- API base URL: `https://hashie-api-v2-ghlooukrva-bq.a.run.app`
+- API base URL: `https://hashie-api-v2-239035662159.africa-south1.run.app`
 - Health check: `GET /health`
 - Readiness check: `GET /ready`
 - API documentation: `GET /docs`
@@ -16,7 +16,7 @@ The existing `hashie-api` service and its database remain separate. Mobile must 
 Set the client API URL using the mobile app's existing environment variable:
 
 ```text
-EXPO_PUBLIC_HASHIE_API_URL=https://hashie-api-v2-ghlooukrva-bq.a.run.app
+EXPO_PUBLIC_HASHIE_API_URL=https://hashie-api-v2-239035662159.africa-south1.run.app
 ```
 
 The mobile app must not receive the database URL, gateway token, Clerk secret, webhook secret, or any other server credential. There is no API key for the Hashie API; authenticated requests send a Clerk bearer token obtained from the mobile Clerk session.
