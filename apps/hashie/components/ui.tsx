@@ -55,8 +55,9 @@ type TextFieldProps = TextInputProps & {
 export function TextField({ label, style, ...props }: TextFieldProps) {
   return (
     <View style={styles.fieldGroup}>
-      {label ? <Text style={textStyles.bodyStrong}>{label}</Text> : null}
+      {label ? <Text style={textStyles.bodyStrong} selectable>{label}</Text> : null}
       <TextInput
+        accessibilityLabel={label}
         placeholderTextColor={colors.textMuted}
         style={[styles.textField, style]}
         {...props}
@@ -111,7 +112,7 @@ export function Choice({ children, selected = false, style, ...props }: ChoicePr
       ]}
       {...props}
     >
-      <Text style={[textStyles.bodyStrong, selected && styles.selectedChoiceText]}>{children}</Text>
+      <Text style={[textStyles.bodyStrong, selected && styles.selectedChoiceText]} selectable>{children}</Text>
     </Pressable>
   );
 }
