@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { ConversationRepository } from '../../db/repositories.js';
 import type { AppConfig } from '../../config/env.js';
 import { requireAuth } from '../../plugins/auth.js';
+import { buildHashieSystemPrompt, HASHIE_SYSTEM_PROMPT_VERSION } from '../../providers/intelligence/system-prompt.js';
 
 const languages = Type.Union([Type.Literal('en'), Type.Literal('tw')]);
 const ageGroups = Type.Union(['under_13', '13_to_15', '16_to_17', '18_plus', 'unknown'].map(value => Type.Literal(value)));
@@ -57,16 +58,16 @@ export async function registerConversationRoutes(app: FastifyInstance, config: A
     const existing = userId ? await repo.get(userId, conversationId) : undefined;
     if (!existing || !userId) return reply.code(404).send({ error: { code: 'not_found', message: 'The conversation was not found.', requestId: request.correlationId } });
     const input = request.body as MessageBody;
-    const safety = await app.safetyProvider.classify({ text: input.content, language: input.language, ageGroup: input.ageGroup });
+    const [profile] = await repo.profile(userId);
+    const language = profile?.language ?? input.language;
+    const ageGroup = profile?.ageGroup ?? input.ageGroup;
+    const safety = await app.safetyProvider.classify({ text: input.content, language, ageGroup });
     const abortController = new AbortController();
     // `IncomingMessage.close` also fires after a normal request body has been
     // consumed. Treat only an aborted request as a client disconnect; using
     // `close` here cancelled healthy streams before message.completed.
     request.raw.on('aborted', () => abortController.abort());
-    await repo.addMessage({ conversationId, role: 'user', content: input.content, language: input.language, safetyResult: { decision: safety.decision, reasons: safety.reasons } });
-    const hits = await app.retriever.search({ query: input.content, language: input.language, limit: 5 });
-    const history = normalizeProviderHistory([...existing.messages, { role: 'user' as const, content: input.content, language: input.language }].map(message => ({ role: message.role, content: message.content })));
-    const system = `You are Hashie, a Ghana-focused health education assistant. Respond in ${input.language === 'tw' ? 'natural Akan/Twi; do not switch to English unless the user asks or you cannot safely express a critical detail' : 'English'}. The user age group is ${input.ageGroup}. Do not diagnose, prescribe, or replace a clinician. Do not engage substantively with culturally sensitive topics; refer the user to qualified human support. State uncertainty and recommend appropriate human care. ${hits.length ? `Reviewed references: ${hits.map(hit => `[${hit.id}] ${hit.title}: ${hit.body}`).join('\n')}` : ''}`;
+    await repo.addMessage({ conversationId, role: 'user', content: input.content, language, safetyResult: { decision: safety.decision, reasons: safety.reasons } });
     reply.hijack();
     reply.raw.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-request-id': request.correlationId });
     writeEvent(reply, 'message.started', { requestId: request.correlationId });
@@ -75,22 +76,25 @@ export async function registerConversationRoutes(app: FastifyInstance, config: A
         ? 'Please seek urgent emergency care now. If you are in immediate danger, contact local emergency services or a trusted person nearby.'
         : 'This topic needs private, qualified human support, so Hashie will not discuss it here. Please contact a licensed health professional or trusted support service.';
       writeEvent(reply, 'message.delta', { text });
-      const [saved] = await repo.addMessage({ conversationId, role: 'assistant', content: text, language: input.language, policyVersion: safety.policyVersion, safetyResult: { decision: safety.decision, reasons: safety.reasons } });
+      const [saved] = await repo.addMessage({ conversationId, role: 'assistant', content: text, language, policyVersion: safety.policyVersion, safetyResult: { decision: safety.decision, reasons: safety.reasons } });
       await repo.touch(conversationId);
       writeEvent(reply, 'message.completed', { messageId: saved?.id, persisted: Boolean(saved), safety: safety.decision });
       reply.raw.end();
       return;
     }
+    const hits = await app.retriever.search({ query: input.content, language, limit: 5 });
+    const history = normalizeProviderHistory([...existing.messages, { role: 'user' as const, content: input.content, language }].map(message => ({ role: message.role, content: message.content })));
+    const system = buildHashieSystemPrompt({ language, ageGroup, region: profile?.region, accessibility: profile?.accessibility, voiceFirst: profile?.voiceFirst }, hits);
     let answer = '';
     let chunkCount = 0;
     try {
-      for await (const chunk of app.intelligenceProvider.stream({ messages: [{ role: 'system', content: system }, ...history], language: input.language, ageGroup: input.ageGroup, signal: abortController.signal })) {
+      for await (const chunk of app.intelligenceProvider.stream({ messages: [{ role: 'system', content: system }, ...history], language, ageGroup, signal: abortController.signal })) {
         chunkCount += 1;
         if (chunk.text) { answer += chunk.text; writeEvent(reply, 'message.delta', { text: chunk.text }); }
       }
       request.log.info({ streamAborted: abortController.signal.aborted, chunkCount, hasAnswer: Boolean(answer) }, 'chat stream provider finished');
       if (!abortController.signal.aborted && answer) {
-        const [saved] = await repo.addMessage({ conversationId, role: 'assistant', content: answer, language: input.language, modelVersion: config.gatewayEnabled ? (input.language === 'tw' ? 'hashie-sunflower' : 'hashie-medgemma') : 'fake', policyVersion: safety.policyVersion, safetyResult: { decision: safety.decision, reasons: safety.reasons }, retrievedContentIds: hits.map(hit => hit.id) });
+        const [saved] = await repo.addMessage({ conversationId, role: 'assistant', content: answer, language, modelVersion: config.gatewayEnabled ? (language === 'tw' ? 'hashie-sunflower' : 'hashie-medgemma') : 'fake', policyVersion: `${safety.policyVersion}:${HASHIE_SYSTEM_PROMPT_VERSION}`, safetyResult: { decision: safety.decision, reasons: safety.reasons }, retrievedContentIds: hits.map(hit => hit.id) });
         await repo.touch(conversationId);
         writeEvent(reply, 'message.completed', { messageId: saved?.id, persisted: Boolean(saved) });
       } else if (!abortController.signal.aborted) {

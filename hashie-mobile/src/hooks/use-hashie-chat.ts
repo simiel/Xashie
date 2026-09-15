@@ -236,6 +236,7 @@ export function useHashieChat({ owner, language, ageGroup }: UseHashieChatOption
   const cancelClear = useCallback(() => dispatch({ type: 'set_clear_confirmation', value: false }), []);
   const confirmClear = useCallback(async () => {
     generationRef.current?.controller.abort();
+    conversationIdRef.current = null;
     if (owner) await clearChatHistory(owner);
     dispatch({ type: 'set_clear_confirmation', value: false });
     dispatch({ type: 'clear' });

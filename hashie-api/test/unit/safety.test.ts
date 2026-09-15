@@ -4,10 +4,10 @@ import { RuleSafetyProvider } from '../../src/providers/safety/rules.js';
 describe('safety referral policy', () => {
   const provider = new RuleSafetyProvider();
 
-  it.each(['I want to learn about LGBT stuff.', 'Is it okay for guys to kiss guys?', 'I have a question about HIV.', 'Can we talk about my religion?', 'I have a disability.'])('allows sensitive topics without stigma: %s', async (text) => {
+  it.each(['I want to learn about LGBT stuff.', 'Is it okay for guys to kiss guys?', 'I have a question about HIV.', 'Can we talk about my religion?', 'I have a disability.'])('refers culturally sensitive topics without engaging: %s', async (text) => {
     await expect(provider.classify({ text, language: 'en', ageGroup: '18_plus' })).resolves.toMatchObject({
-      decision: 'allow',
-      reasons: ['sensitive_topic_requires_dignity'],
+      decision: 'human_referral',
+      reasons: ['culturally_sensitive_topic'],
     });
   });
 
