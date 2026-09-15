@@ -1,3 +1,0 @@
-import { router } from 'expo-router';
-import { AuthScreen, PrimaryButton, SecondaryButton, StatusMessage } from '@/components/auth-screen';
-export default function AuthenticationUnavailableScreen() { return <AuthScreen title="Authentication is unavailable" body="We could not reach the secure sign-in service. Check your connection and try again when you are ready."><StatusMessage tone="warning">Do not share personal health information on an untrusted connection.</StatusMessage><PrimaryButton label="Try again" hint="Return to Google sign-in" onPress={() => router.replace('/sign-in')} /><SecondaryButton label="Back" hint="Return to the welcome screen" onPress={() => router.replace('/welcome')} /></AuthScreen>; }
