@@ -30,7 +30,7 @@ create table public.hashie_knowledge_documents (
 
 create index hashie_knowledge_documents_embedding_cosine_idx
   on public.hashie_knowledge_documents
-  using hnsw (embedding vector_cosine_ops)
+  using hnsw (embedding extensions.vector_cosine_ops)
   with (m = 16, ef_construction = 64);
 
 alter table public.hashie_knowledge_documents enable row level security;
