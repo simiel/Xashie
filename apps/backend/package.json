@@ -1,0 +1,22 @@
+{
+  "name": "@hashie/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hashie server-owned API boundary for guest sessions, Clerk actors, and onboarding preferences.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && node --enable-source-maps dist/src/server.js",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "start": "node --enable-source-maps dist/src/server.js",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@clerk/backend": "3.16.10"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.5",
+    "typescript": "6.0.3"
+  }
+}

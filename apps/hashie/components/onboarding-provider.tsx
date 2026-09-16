@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
+import { useAuth } from '@clerk/expo';
 
 import {
   AccessibilityPreference,
@@ -8,6 +9,7 @@ import {
   AccessChoice,
   AgeGroup,
 } from '@/constants/onboarding';
+import { getGuestToken, getHashieErrorMessage, hashieApi, saveGuestToken } from '@/lib/hashie-api';
 
 type OnboardingContextValue = {
   state: OnboardingState;
@@ -17,12 +19,65 @@ type OnboardingContextValue = {
   setAgeGroup: (value: AgeGroup) => void;
   toggleAccessibilityPreference: (value: AccessibilityPreference) => void;
   clearAccessibilityPreferences: () => void;
+  beginGuestSession: () => Promise<void>;
+  completeOnboarding: () => Promise<boolean>;
+  isConnecting: boolean;
+  submissionError: string;
+  clearSubmissionError: () => void;
 };
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<OnboardingState>(initialOnboardingState);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [submissionError, setSubmissionError] = useState('');
+  const { getToken } = useAuth();
+
+  const beginGuestSession = async () => {
+    setIsConnecting(true);
+    setSubmissionError('');
+    try {
+      const result = await hashieApi.createGuestSession();
+      await saveGuestToken(result.token);
+      setState((current) => ({ ...current, accessChoice: 'guest' }));
+    } catch (error) {
+      setSubmissionError(getHashieErrorMessage(error));
+      throw error;
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const completeOnboarding = async () => {
+    setIsConnecting(true);
+    setSubmissionError('');
+    try {
+      const preferences = {
+        language: state.language,
+        nickname: state.nickname.trim() || null,
+        ageGroup: state.ageGroup,
+        accessibilityPreferences: state.accessibilityPreferences,
+      };
+      if (state.accessChoice === 'guest') {
+        const guestToken = await getGuestToken();
+        if (!guestToken) throw new Error('Guest session is missing.');
+        await hashieApi.patchPreferences(preferences, { guestToken });
+      } else if (state.accessChoice === 'google') {
+        const clerkToken = await getToken();
+        if (!clerkToken) throw new Error('Signed-in session is missing.');
+        await hashieApi.patchPreferences(preferences, { clerkToken });
+      } else {
+        throw new Error('Access choice is missing.');
+      }
+      return true;
+    } catch (error) {
+      setSubmissionError(getHashieErrorMessage(error));
+      return false;
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   const value = useMemo<OnboardingContextValue>(
     () => ({
@@ -52,8 +107,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         }),
       clearAccessibilityPreferences: () =>
         setState((current) => ({ ...current, accessibilityPreferences: [] })),
+      beginGuestSession,
+      completeOnboarding,
+      isConnecting,
+      submissionError,
+      clearSubmissionError: () => setSubmissionError(''),
     }),
-    [state],
+    [beginGuestSession, completeOnboarding, getToken, isConnecting, state, submissionError],
   );
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

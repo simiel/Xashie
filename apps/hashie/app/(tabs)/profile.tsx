@@ -18,7 +18,7 @@ export default function ProfileScreen() {
       <Stack.Screen options={{ title: 'Profile' }} />
       <View style={{ alignItems: 'center', gap: spacing.sm }}><HashieLogo compact /><Text style={textStyles.heading1} selectable>Your choices</Text><Text style={textStyles.body} selectable>Review or change the preferences you shared for this session.</Text></View>
       <View style={{ ...surfaces.card, gap: spacing.md, padding: spacing.lg }}>
-        <SummaryRow label="Access" value={state.accessChoice === 'guest' ? 'Guest' : 'Not connected'} />
+        <SummaryRow label="Access" value={state.accessChoice === 'guest' ? 'Guest' : state.accessChoice === 'google' ? 'Google account' : 'Not connected'} />
         <SummaryRow label="Language" value={state.language === 'akan-twi' ? 'Akan / Twi' : 'English'} />
         <SummaryRow label="Nickname" value={state.nickname.trim() || 'Not shared'} />
         <SummaryRow label="Broad age group" value={ageGroup} />
@@ -27,7 +27,7 @@ export default function ProfileScreen() {
       </View>
       <FeatureNotice>
         <Text style={[textStyles.bodyStrong, { color: colors.successText }]} selectable>Session-only prototype</Text>
-        <Text style={textStyles.body} selectable>Your choices are held in memory on this device for this session. They are not saved, logged, sent to providers, or used for analytics in this slice.</Text>
+        <Text style={textStyles.body} selectable>Your choices are sent only to Hashie's backend for the active session. Hashie does not share them with AI providers from this screen.</Text>
       </FeatureNotice>
     </ScreenScroll>
   );

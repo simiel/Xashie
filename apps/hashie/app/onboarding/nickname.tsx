@@ -25,7 +25,7 @@ export default function NicknameScreen() {
   return (
     <OnboardingScreen step={3} title="What should Hashie call you?" body="A nickname can make the app feel more personal. It is optional, and you can change it later." onContinue={continueToAge} onSkip={() => { setError(''); setNickname(''); router.push('/onboarding/age-group'); }}>
       <TextField label="Your nickname (optional)" value={state.nickname} onChangeText={(value) => { setNickname(value); setError(''); }} placeholder="Type a nickname" error={error} maxLength={24} returnKeyType="done" testID="nickname-field" />
-      <FeatureNotice><Text style={[textStyles.bodyStrong, { color: colors.successText }]} selectable>No legal name needed.</Text><Text style={textStyles.body} selectable>Only share a nickname if it feels helpful. It stays in memory for this session.</Text></FeatureNotice>
+      <FeatureNotice><Text style={[textStyles.bodyStrong, { color: colors.successText }]} selectable>No legal name needed.</Text><Text style={textStyles.body} selectable>Only share a nickname if it feels helpful. It is sent securely with your setup choices.</Text></FeatureNotice>
     </OnboardingScreen>
   );
 }

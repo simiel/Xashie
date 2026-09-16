@@ -21,8 +21,8 @@ export default function StartScreen() {
         <ActionButton onPress={() => router.push('/onboarding/access')} testID="start-onboarding" accessibilityLabel="Start privately as a guest">Start privately as a guest  →</ActionButton>
       </View>
       <FeatureNotice>
-        <Text style={[textStyles.bodyStrong, { color: colors.successText }]} selectable>Prototype note</Text>
-        <Text style={textStyles.body} selectable>Sign-in, saved profiles, the support agent, and health resources are not connected yet.</Text>
+        <Text style={[textStyles.bodyStrong, { color: colors.successText }]} selectable>Start with care</Text>
+        <Text style={textStyles.body} selectable>Guest sessions and Google sign-in are connected for this setup. The support agent and health library are still being built.</Text>
       </FeatureNotice>
     </ScreenScroll>
   );

@@ -12,7 +12,7 @@ export default function LanguageScreen() {
     <OnboardingScreen step={2} title="What language feels best for you?" body="Choosing a language helps Hashie communicate more clearly. You can change this later in Profile." onContinue={() => router.push('/onboarding/nickname')} onSkip={() => router.push('/onboarding/nickname')}>
       <ChoiceCard selected={state.language === 'english'} onPress={() => setLanguage('english')} accessibilityLabel="English" testID="language-english"><Text style={textStyles.heading2} selectable>English</Text><Text style={textStyles.body} selectable>Hear an example · audio is not connected</Text></ChoiceCard>
       <ChoiceCard selected={state.language === 'akan-twi'} onPress={() => setLanguage('akan-twi')} accessibilityLabel="Akan or Twi" testID="language-akan-twi"><Text style={textStyles.heading2} selectable>Akan / Twi</Text><Text style={textStyles.body} selectable>Hear an example · audio is not connected</Text></ChoiceCard>
-      <FeatureNotice tone="blue"><Text style={[textStyles.bodyStrong, { color: colors.textPrimary }]} selectable>Language preference</Text><Text style={textStyles.body} selectable>This only guides the future experience in this local prototype; it is not sent anywhere.</Text></FeatureNotice>
+      <FeatureNotice tone="blue"><Text style={[textStyles.bodyStrong, { color: colors.textPrimary }]} selectable>Language preference</Text><Text style={textStyles.body} selectable>This helps Hashie communicate clearly and is saved with your active session.</Text></FeatureNotice>
     </OnboardingScreen>
   );
 }
