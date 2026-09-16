@@ -129,8 +129,24 @@ test('agent stream requires an actor and passes only validated input to the serv
   assert.equal(await response.text(), 'grounded reply');
   assert.equal(received.message, 'What is puberty?');
   assert.equal(received.actor.type, 'guest');
+  assert.deepEqual(received.userContext, { name: 'Not provided', ageGroup: 'Not provided', preferredLanguage: 'Not provided', accessibilityPreferences: [], sessionType: 'guest' });
   const rejected = await call(app, '/v1/agent/stream', { method: 'POST', body: JSON.stringify({ message: 'x' }) });
   assert.equal(rejected.response.status, 401);
+});
+
+test('guest and Clerk agent requests get the same server-owned preference context', async () => {
+  const calls = [];
+  const store = new InMemoryDataStore();
+  const app = createApp({ store, clerk: new FakeClerkVerifier(), rateLimiter: new MemoryRateLimiter(), agent: { async stream(input) { calls.push(input); return new Response('ok'); } } });
+  const guest = await call(app, '/v1/guest-sessions', { method: 'POST' });
+  await call(app, '/v1/me/preferences', { method: 'PATCH', headers: { 'x-hashie-guest-token': guest.body.token }, body: JSON.stringify({ nickname: 'Ama', ageGroup: '13-15', language: 'english', accessibilityPreferences: ['visual-details'] }) });
+  await call(app, '/v1/me/preferences', { method: 'PATCH', headers: { authorization: 'Bearer clerk-token' }, body: JSON.stringify({ nickname: 'Kojo', ageGroup: '18-24', language: 'english', accessibilityPreferences: ['captions'] }) });
+  await app(new Request('https://api.test/v1/agent/stream', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hashie-guest-token': guest.body.token }, body: JSON.stringify({ message: 'What is puberty?' }) }));
+  await app(new Request('https://api.test/v1/agent/stream', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer clerk-token' }, body: JSON.stringify({ message: 'What is puberty?' }) }));
+  assert.deepEqual(calls.map((call) => call.userContext), [
+    { name: 'Ama', ageGroup: '13-15', preferredLanguage: 'english', accessibilityPreferences: ['visual-details'], sessionType: 'guest' },
+    { name: 'Kojo', ageGroup: '18-24', preferredLanguage: 'english', accessibilityPreferences: ['captions'], sessionType: 'signed-in' },
+  ]);
 });
 
 test('guest upgrade requires consent, migrates once, and is idempotent', async () => {

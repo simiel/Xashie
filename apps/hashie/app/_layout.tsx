@@ -15,6 +15,7 @@ import { tokenCache } from '@clerk/expo/token-cache';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { OnboardingProvider } from '@/components/onboarding-provider';
+import { SupportChatProvider } from '@/components/support-chat-provider';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -64,14 +65,16 @@ function RootLayoutNav() {
   return (
     <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
       <OnboardingProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          </Stack>
-        </ThemeProvider>
+        <SupportChatProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            </Stack>
+          </ThemeProvider>
+        </SupportChatProvider>
       </OnboardingProvider>
     </ClerkProvider>
   );

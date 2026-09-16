@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createAgentServiceFromEnv, type AgentStreamer } from './agent.js';
+import { createAgentUserContext } from './agent-context.js';
 import { parseAgentRequest } from './agent-validation.js';
 import { createClerkVerifierFromEnv, type ClerkIdentity, type ClerkVerification, type ClerkVerifier } from './clerk.js';
 import { type Actor, type Preferences, type StoredPreferences } from './contracts.js';
@@ -223,7 +224,10 @@ export function createApp(deps: AppDependencies): (request: Request) => Promise<
         const actorId = actor.type === 'guest' ? actor.sessionId : actor.userId;
         checkRateLimit(deps.rateLimiter, `agent:actor:${actor.type}:${actorId}`, agentActorLimit, now);
         checkRateLimit(deps.rateLimiter, `agent:ip:${clientKey(request)}`, agentClientLimit, now);
-        return deps.agent.stream({ ...parseAgentRequest(await readJsonBody(request)), actor, abortSignal: request.signal, requestId });
+        const agentRequest = parseAgentRequest(await readJsonBody(request));
+        const owner = ownerFor(actor);
+        const preferences = await deps.store.getPreferences(owner.ownerType, owner.ownerId);
+        return deps.agent.stream({ ...agentRequest, actor, userContext: createAgentUserContext(actor, preferences), abortSignal: request.signal, requestId });
       }
 
       throw new ApiError(404, 'not_found', 'Route not found.');

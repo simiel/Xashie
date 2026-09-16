@@ -6,6 +6,7 @@ if (!gateway) throw new Error('Gateway credentials are not configured.');
 const agent = new AgentService(gateway, null);
 const response = await agent.stream({
   actor: { type: 'guest', sessionId: 'synthetic-smoke-session' },
+  userContext: { name: 'Not provided', ageGroup: 'Not provided', preferredLanguage: 'english', accessibilityPreferences: [], sessionType: 'guest' },
   message: 'Please give one short, non-sensitive wellbeing greeting.',
   history: [],
   requestId: 'synthetic-agent-stream-smoke',

@@ -53,6 +53,13 @@ export function getHashieErrorMessage(error: unknown): string {
 }
 
 type RequestOptions = { guestToken?: string | null; clerkToken?: string | null; method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown };
+type AgentHistoryMessage = { role: 'user' | 'assistant'; content: string };
+type StreamAgentOptions = Pick<RequestOptions, 'guestToken' | 'clerkToken'> & {
+  message: string;
+  history: AgentHistoryMessage[];
+  signal?: AbortSignal;
+  onText: (text: string) => void;
+};
 
 export class HashieApiClient {
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -95,6 +102,49 @@ export class HashieApiClient {
 
   patchPreferences(preferences: PreferencesPatch, credentials: Pick<RequestOptions, 'guestToken' | 'clerkToken'>) {
     return this.request<{ actor: HashieActor; preferences: HashiePreferences }>('/v1/me/preferences', { ...credentials, method: 'PATCH', body: preferences });
+  }
+
+  async streamAgent({ message, history, guestToken, clerkToken, signal, onText }: StreamAgentOptions): Promise<void> {
+    if (guestToken && clerkToken) throw new HashieApiError('Conflicting session credentials.', 400, 'conflicting_credentials');
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const headers: Record<string, string> = { accept: 'text/plain', 'content-type': 'application/json' };
+      if (guestToken) headers['x-hashie-guest-token'] = guestToken;
+      if (clerkToken) headers.authorization = `Bearer ${clerkToken}`;
+      let response: Response;
+      try {
+        response = await fetch(`${apiBaseUrl()}/v1/agent/stream`, {
+          method: 'POST', headers, body: JSON.stringify({ message, history }), signal: controller.signal,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) throw new HashieApiError('Hashie could not start this reply.', 0, signal?.aborted ? 'aborted' : 'timeout');
+        throw new HashieApiError('Hashie could not reach its service.', 0, 'network_error');
+      }
+      clearTimeout(timeout);
+      if (!response.ok) {
+        let payload: { error?: { code?: unknown }; requestId?: unknown } | null = null;
+        try { payload = JSON.parse(await response.text()); } catch { /* Keep malformed server data out of the UI. */ }
+        const code = safeString(payload?.error?.code) ?? 'request_failed';
+        throw new HashieApiError(userFacingMessage(response.status, code), response.status, code, safeString(payload?.requestId) ?? response.headers.get('x-request-id'));
+      }
+      if (!response.body) throw new HashieApiError('Hashie sent an empty reply.', 502, 'service_unavailable');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        if (text) onText(text);
+      }
+      const remaining = decoder.decode();
+      if (remaining) onText(remaining);
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+    }
   }
 }
 
