@@ -114,6 +114,25 @@ test('expired guests cannot access protected routes', async () => {
   assert.equal(session.body.error.code, 'invalid_credentials');
 });
 
+test('agent stream requires an actor and passes only validated input to the server-owned agent', async () => {
+  let received = null;
+  const store = new InMemoryDataStore();
+  const app = createApp({
+    store, clerk: new FakeClerkVerifier(), rateLimiter: new MemoryRateLimiter(),
+    agent: { async stream(input) { received = input; return new Response('grounded reply', { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } }); } },
+  });
+  const created = await call(app, '/v1/guest-sessions', { method: 'POST' });
+  const response = await app(new Request('https://api.test/v1/agent/stream', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-hashie-guest-token': created.body.token }, body: JSON.stringify({ message: 'What is puberty?' }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'grounded reply');
+  assert.equal(received.message, 'What is puberty?');
+  assert.equal(received.actor.type, 'guest');
+  const rejected = await call(app, '/v1/agent/stream', { method: 'POST', body: JSON.stringify({ message: 'x' }) });
+  assert.equal(rejected.response.status, 401);
+});
+
 test('guest upgrade requires consent, migrates once, and is idempotent', async () => {
   const { app } = setup();
   const created = await call(app, '/v1/guest-sessions', { method: 'POST' });

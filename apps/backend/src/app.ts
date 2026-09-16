@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { createAgentServiceFromEnv, type AgentStreamer } from './agent.js';
+import { parseAgentRequest } from './agent-validation.js';
 import { createClerkVerifierFromEnv, type ClerkIdentity, type ClerkVerification, type ClerkVerifier } from './clerk.js';
 import { type Actor, type Preferences, type StoredPreferences } from './contracts.js';
 import { ApiError, AuthServiceError, StoreError, ValidationError } from './errors.js';
 import { MemoryRateLimiter, type RateLimiter } from './rate-limit.js';
+import { createGatewayTokenManagerFromEnv } from './gateway-token-manager.js';
+import { createKnowledgeServiceFromEnv } from './knowledge.js';
 import { createOpaqueGuestToken, guestSessionTtlMs, hashSecret, isExpired, toIso } from './security.js';
 import { createDataStoreFromEnv, type DataStore } from './store.js';
 import { parseBearerToken, parseIdempotencyKey, parsePreferencesPatch, parseUpgradeConsent } from './validation.js';
@@ -14,6 +18,7 @@ export type AppDependencies = {
   store: DataStore;
   clerk: ClerkVerifier;
   rateLimiter: RateLimiter;
+  agent?: AgentStreamer | null;
   now?: () => Date;
   requestId?: () => string;
 };
@@ -21,6 +26,8 @@ export type AppDependencies = {
 const jsonHeaders = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const guestSessionLimit = { limit: 5, windowMs: 60_000 };
 const upgradeLimit = { limit: 5, windowMs: 60_000 };
+const agentActorLimit = { limit: 8, windowMs: 60_000 };
+const agentClientLimit = { limit: 20, windowMs: 60_000 };
 
 function responseJson(requestId: string, status: number, value: unknown, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(value), {
@@ -133,7 +140,13 @@ async function resolveUpgrade(request: Request, deps: AppDependencies, now: Date
 }
 
 function createRuntimeDependencies(env: NodeJS.ProcessEnv = process.env): AppDependencies {
-  return { store: createDataStoreFromEnv(env), clerk: createClerkVerifierFromEnv(env), rateLimiter: new MemoryRateLimiter() };
+  const gateway = createGatewayTokenManagerFromEnv(env);
+  return {
+    store: createDataStoreFromEnv(env),
+    clerk: createClerkVerifierFromEnv(env),
+    rateLimiter: new MemoryRateLimiter(),
+    agent: createAgentServiceFromEnv(env, gateway, createKnowledgeServiceFromEnv(env)),
+  };
 }
 
 export function createApp(deps: AppDependencies): (request: Request) => Promise<Response> {
@@ -202,6 +215,15 @@ export function createApp(deps: AppDependencies): (request: Request) => Promise<
         }
         const preferences = await deps.store.upsertPreferences(owner.ownerType, owner.ownerId, parsePreferencesPatch(await readJsonBody(request)), toIso(now));
         return responseJson(requestId, 200, { actor: actorPayload(actor), preferences: publicPreferences(preferences) });
+      }
+
+      if (path === '/v1/agent/stream' && request.method === 'POST') {
+        const actor = requireActor(await resolveActor(request, deps, now));
+        if (!deps.agent) throw new AuthServiceError('not_configured');
+        const actorId = actor.type === 'guest' ? actor.sessionId : actor.userId;
+        checkRateLimit(deps.rateLimiter, `agent:actor:${actor.type}:${actorId}`, agentActorLimit, now);
+        checkRateLimit(deps.rateLimiter, `agent:ip:${clientKey(request)}`, agentClientLimit, now);
+        return deps.agent.stream({ ...parseAgentRequest(await readJsonBody(request)), actor, abortSignal: request.signal, requestId });
       }
 
       throw new ApiError(404, 'not_found', 'Route not found.');

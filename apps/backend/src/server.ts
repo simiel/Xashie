@@ -19,7 +19,19 @@ const server = createServer(async (incoming, outgoing) => {
     const response = await handleRequest(request);
     outgoing.statusCode = response.status;
     response.headers.forEach((value, key) => outgoing.setHeader(key, value));
-    outgoing.end(Buffer.from(await response.arrayBuffer()));
+    if (!response.body) {
+      outgoing.end();
+      return;
+    }
+    const stream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+    stream.on('error', () => {
+      if (!outgoing.headersSent) {
+        outgoing.statusCode = 502;
+        outgoing.setHeader('content-type', 'application/json; charset=utf-8');
+      }
+      outgoing.end();
+    });
+    stream.pipe(outgoing);
   } catch {
     outgoing.statusCode = 500;
     outgoing.setHeader('content-type', 'application/json; charset=utf-8');
