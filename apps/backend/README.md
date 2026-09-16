@@ -20,12 +20,15 @@ Copy `.env.example` to a local environment and replace the obvious placeholders.
 - `CLERK_SECRET_KEY` or `CLERK_JWT_KEY`, plus optional `CLERK_PUBLISHABLE_KEY` and `CLERK_AUTHORIZED_PARTIES` — server-side Clerk request verification.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — server-only persistence access. Never put the service-role key in the mobile app.
 - `HASHIE_DATA_STORE` and `HASHIE_ALLOW_INSECURE_MEMORY_STORE` — explicit local memory-store controls.
+- `OPENAI_API_KEY` and optional `HASHIE_EMBEDDING_MODEL` — server-only embeddings for reviewed knowledge ingestion and future agent retrieval. Never expose either to the mobile app.
 
-The mobile app uses separate client-safe values documented in [`apps/hashie/README.md`](../hashie/README.md). Do not add Google OAuth client IDs or secrets to source or env files for this slice; configure Google as a provider in the Clerk Dashboard. Do not add an OpenAI key: AI operations are outside this slice.
+The mobile app uses separate client-safe values documented in [`apps/hashie/README.md`](../hashie/README.md). Do not add Google OAuth client IDs or secrets to source or mobile env files; configure Google as a provider in the Clerk Dashboard. Keep any OpenAI key in the backend's managed server environment only.
 
 The default data store is deliberately unavailable and returns a safe `503` until persistence is configured. For local-only development, memory storage requires both `HASHIE_DATA_STORE=memory` and `HASHIE_ALLOW_INSECURE_MEMORY_STORE=true` while `NODE_ENV` is not `production`. It is process-local and must not be used for production or sensitive testing.
 
-The approved Supabase schema and transactional guest-upgrade function are specified in [`supabase/migrations/20260916_hashie_auth_persistence.sql`](../../supabase/migrations/20260916_hashie_auth_persistence.sql). The connected project must have that migration applied before the configured adapter can persist guest sessions, preferences, or upgrades. Until the live schema is applied, the adapter remains fail-closed and returns `503` rather than pretending the operation is atomic.
+The approved Supabase schema and transactional guest-upgrade function are specified in [`supabase/migrations/20260916_hashie_auth_persistence.sql`](../../supabase/migrations/20260916_hashie_auth_persistence.sql). The reviewed knowledge-vector schema is specified in [`supabase/migrations/20260916060624_hashie_knowledge_retrieval.sql`](../../supabase/migrations/20260916060624_hashie_knowledge_retrieval.sql). The connected project must have the applicable migration applied before the configured adapter can use it. Until the live schema is applied, the adapter remains fail-closed and returns `503` rather than pretending the operation is atomic.
+
+Run `npm run ingest:knowledge` only in a server environment after applying the knowledge migration and configuring the three server-only variables above. It regenerates the mobile library from the canonical source, then embeds only new or changed complete entries. It does not log questions, answers, credentials, or user information.
 
 ## Local checks
 

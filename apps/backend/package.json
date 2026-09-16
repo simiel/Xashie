@@ -10,6 +10,7 @@
     "lint": "tsc --noEmit -p tsconfig.json",
     "start": "node --enable-source-maps dist/src/server.js",
     "test": "npm run build && node --test test/*.test.mjs",
+    "ingest:knowledge": "npm run build && node scripts/ingest-health-knowledge.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

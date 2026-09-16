@@ -1,0 +1,11 @@
+{
+  "source": "artifacts/data/healthQAdata.json",
+  "sourceSha256": "3daae919697e037766226bc7a4f54af6bde0bddf8aaae549906efe43ca65ba56",
+  "sourceRows": 5536,
+  "usableEntries": 5524,
+  "skippedBlankRows": 11,
+  "skippedIncompleteRows": [
+    1072
+  ],
+  "note": "Blank or incomplete source rows are preserved in the canonical file and excluded only because they contain no complete question-and-answer content to display or embed."
+}
