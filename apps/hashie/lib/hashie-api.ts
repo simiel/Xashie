@@ -109,7 +109,11 @@ export class HashieApiClient {
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 30_000);
     try {
       const headers: Record<string, string> = { accept: 'text/plain', 'content-type': 'application/json' };
       if (guestToken) headers['x-hashie-guest-token'] = guestToken;
@@ -120,10 +124,10 @@ export class HashieApiClient {
           method: 'POST', headers, body: JSON.stringify({ message, history }), signal: controller.signal,
         });
       } catch (error) {
-        if (controller.signal.aborted) throw new HashieApiError('Hashie could not start this reply.', 0, signal?.aborted ? 'aborted' : 'timeout');
+        if (signal?.aborted) throw new HashieApiError('Reply stopped.', 0, 'aborted');
+        if (timedOut) throw new HashieApiError('Hashie took too long to reply.', 0, 'timeout');
         throw new HashieApiError('Hashie could not reach its service.', 0, 'network_error');
       }
-      clearTimeout(timeout);
       if (!response.ok) {
         let payload: { error?: { code?: unknown }; requestId?: unknown } | null = null;
         try { payload = JSON.parse(await response.text()); } catch { /* Keep malformed server data out of the UI. */ }
@@ -133,14 +137,20 @@ export class HashieApiClient {
       if (!response.body) throw new HashieApiError('Hashie sent an empty reply.', 502, 'service_unavailable');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const text = decoder.decode(value, { stream: true });
-        if (text) onText(text);
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          if (text) onText(text);
+        }
+        const remaining = decoder.decode();
+        if (remaining) onText(remaining);
+      } catch (error) {
+        if (signal?.aborted) throw new HashieApiError('Reply stopped.', 0, 'aborted');
+        if (timedOut) throw new HashieApiError('Hashie took too long to reply.', 0, 'timeout');
+        throw error;
       }
-      const remaining = decoder.decode();
-      if (remaining) onText(remaining);
     } finally {
       clearTimeout(timeout);
       signal?.removeEventListener('abort', onAbort);

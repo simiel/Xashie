@@ -1,0 +1,9 @@
+.env
+.env.*
+.hashie-gateway-tokens.local.json
+node_modules
+dist
+test
+scripts
+*.log
+Dockerfile*

@@ -4,7 +4,7 @@ This package is the server-owned API boundary for Hashie guest sessions, Clerk-a
 
 ## Routes
 
-- `GET /healthz` — process health only.
+- `GET /health` or `GET /healthz` — process health only. Cloud Run deployments should use `/health` because exact `/healthz` is intercepted by the Cloud Run frontend in this project.
 - `POST /v1/guest-sessions` — creates a 24-hour guest session and returns its opaque token once.
 - `GET /v1/session` — resolves the current guest, Clerk user, or signed-out state.
 - `GET|PATCH|DELETE /v1/me/preferences` — reads, validates, updates, or deletes preferences owned by the current actor.

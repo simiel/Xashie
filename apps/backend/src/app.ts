@@ -161,7 +161,7 @@ export function createApp(deps: AppDependencies): (request: Request) => Promise<
       const path = url.pathname.replace(/\/$/, '') || '/';
       const now = nowProvider();
 
-      if (path === '/healthz' && request.method === 'GET') {
+      if (['/health', '/healthz'].includes(path) && request.method === 'GET') {
         return responseJson(requestId, 200, { ok: true, service: 'hashie-backend', version: 'v1' });
       }
 
