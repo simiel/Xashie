@@ -8,7 +8,8 @@
     "scheme": "hashie",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hashie.app"
     },
     "android": {
       "package": "com.hashie.app",
@@ -36,7 +37,8 @@
         }
       ],
       "@clerk/expo",
-      "expo-secure-store"
+      "expo-secure-store",
+      "@clerk/expo-google-signin"
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,12 +1,17 @@
 {
   "cli": {
-    "version": ">=20.5.1"
+    "version": ">=20.5.1",
+    "appVersionSource": "remote"
   },
   "build": {
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
+      },
+      "env":{
+        "EXPO_PUBLIC_CLERK_GOOGLE_IOS_URL_SCHEME": "com.googleusercontent.apps.239035662159-87mads2q58ou1kgph06l0ga8g5l01cfp"
       }
     }
   }
