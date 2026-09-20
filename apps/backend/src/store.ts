@@ -54,7 +54,7 @@ export class InMemoryDataStore implements DataStore {
     if (!session) throw new StoreError('inactive', 'Guest session is not active.');
     if (session.revokedAt) {
       if (session.upgradedToClerkUserId === clerkUserId && session.upgradeIdempotencyKeyHash === idempotencyKeyHash) {
-        return { alreadyUpgraded: true, migratedPreferences: this.preferences.has(ownerKey('clerk-user', clerkUserId)) };
+        return { alreadyUpgraded: true, migratedPreferences: false };
       }
       throw new StoreError('conflict', 'Guest session was already upgraded.');
     }
@@ -66,7 +66,20 @@ export class InMemoryDataStore implements DataStore {
     const clerkPreferences = this.preferences.get(clerkKey);
     let migratedPreferences = false;
     if (guestPreferences) {
-      if (!clerkPreferences) {
+      if (clerkPreferences) {
+        const accessibilityPreferences = [...clerkPreferences.accessibilityPreferences];
+        for (const preference of guestPreferences.accessibilityPreferences) {
+          if (!accessibilityPreferences.includes(preference)) accessibilityPreferences.push(preference);
+        }
+        this.preferences.set(clerkKey, {
+          ...clerkPreferences,
+          language: clerkPreferences.language ?? guestPreferences.language,
+          nickname: clerkPreferences.nickname ?? guestPreferences.nickname,
+          ageGroup: clerkPreferences.ageGroup ?? guestPreferences.ageGroup,
+          accessibilityPreferences,
+          updatedAt: now,
+        });
+      } else {
         this.preferences.set(clerkKey, {
           ...guestPreferences,
           ownerType: 'clerk-user',
@@ -74,8 +87,8 @@ export class InMemoryDataStore implements DataStore {
           accessibilityPreferences: [...guestPreferences.accessibilityPreferences],
           updatedAt: now,
         });
-        migratedPreferences = true;
       }
+      migratedPreferences = true;
       this.preferences.delete(guestKey);
     }
     session.revokedAt = now;

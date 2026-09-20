@@ -19,6 +19,7 @@ export default function StartScreen() {
         <Text style={textStyles.heading2} selectable>Your choice stays in your control.</Text>
         <Text style={textStyles.body} selectable>Start privately as a guest. You can share only the preferences that help Hashie communicate clearly and accessibly in this session.</Text>
         <ActionButton onPress={() => router.push('/onboarding/access')} testID="start-onboarding" accessibilityLabel="Start privately as a guest">Start privately as a guest  →</ActionButton>
+        <ActionButton onPress={() => router.push('/learn')} variant="secondary" accessibilityLabel="Browse the offline learning library">Browse the offline learning library</ActionButton>
       </View>
       <FeatureNotice>
         <Text style={[textStyles.bodyStrong, { color: colors.successText }]} selectable>Start with care</Text>

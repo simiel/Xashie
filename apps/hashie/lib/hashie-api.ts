@@ -1,8 +1,11 @@
+import { randomUUID } from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 
 import type { AccessibilityPreference, AgeGroup, Language } from '@/constants/onboarding';
 
 const guestTokenStorageKey = 'hashie.guest-session-token';
+const activeActorStorageKey = 'hashie.active-actor-choice';
+const guestUpgradeIdempotencyKeyStorageKey = 'hashie.guest-upgrade-idempotency-key';
 const requestTimeoutMs = 12_000;
 
 export type HashieActor = { type: 'guest' | 'clerk-user'; sessionId: string; userId?: string };
@@ -14,6 +17,8 @@ export type HashiePreferences = {
   updatedAt?: string;
 };
 export type PreferencesPatch = Omit<HashiePreferences, 'updatedAt'>;
+export type StoredActorChoice = 'guest' | 'clerk-user';
+export type SessionCredentials = { guestToken?: string | null; clerkToken?: string | null };
 
 export class HashieApiError extends Error {
   readonly status: number;
@@ -41,7 +46,8 @@ function safeString(value: unknown): string | null {
 
 function userFacingMessage(status: number, code: string): string {
   if (status === 0 || code === 'network_error' || code === 'timeout') return 'Hashie could not reach its service. Check your connection and try again.';
-  if (status === 401 || code === 'invalid_credentials') return 'This session has expired. Start again to continue privately.';
+  if (status === 401 || code === 'invalid_credentials') return 'This session needs to be restored before you continue.';
+  if (status === 409 || code === 'upgrade_conflict') return 'That guest session can no longer be moved to this account.';
   if (status === 429 || code === 'rate_limited') return 'Please wait a moment, then try again.';
   if (status >= 500 || code === 'service_unavailable' || code === 'service_not_configured') return 'Hashie is temporarily unavailable. Please try again shortly.';
   return 'Hashie could not save this yet. Please check your choices and try again.';
@@ -52,7 +58,12 @@ export function getHashieErrorMessage(error: unknown): string {
   return 'Hashie could not complete that step. Please try again.';
 }
 
-type RequestOptions = { guestToken?: string | null; clerkToken?: string | null; method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown };
+type RequestOptions = SessionCredentials & {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  body?: unknown;
+  headers?: Record<string, string>;
+  allowBothCredentials?: boolean;
+};
 type AgentHistoryMessage = { role: 'user' | 'assistant'; content: string };
 type StreamAgentOptions = Pick<RequestOptions, 'guestToken' | 'clerkToken'> & {
   message: string;
@@ -63,8 +74,10 @@ type StreamAgentOptions = Pick<RequestOptions, 'guestToken' | 'clerkToken'> & {
 
 export class HashieApiClient {
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    if (options.guestToken && options.clerkToken) throw new HashieApiError('Conflicting session credentials.', 400, 'conflicting_credentials');
-    const headers: Record<string, string> = { accept: 'application/json' };
+    if (options.guestToken && options.clerkToken && !options.allowBothCredentials) {
+      throw new HashieApiError('Conflicting session credentials.', 400, 'conflicting_credentials');
+    }
+    const headers: Record<string, string> = { accept: 'application/json', ...options.headers };
     if (options.body !== undefined) headers['content-type'] = 'application/json';
     if (options.guestToken) headers['x-hashie-guest-token'] = options.guestToken;
     if (options.clerkToken) headers.authorization = `Bearer ${options.clerkToken}`;
@@ -96,12 +109,39 @@ export class HashieApiClient {
     return this.request<{ token: string; session: { actor: 'guest'; expiresAt: string } }>('/v1/guest-sessions', { method: 'POST' });
   }
 
-  getSession(credentials: Pick<RequestOptions, 'guestToken' | 'clerkToken'> = {}) {
+  getSession(credentials: SessionCredentials = {}) {
     return this.request<{ actor: HashieActor | null; status: 'authenticated' | 'signed-out' }>('/v1/session', credentials);
   }
 
-  patchPreferences(preferences: PreferencesPatch, credentials: Pick<RequestOptions, 'guestToken' | 'clerkToken'>) {
+  getPreferences(credentials: SessionCredentials) {
+    return this.request<{ actor: HashieActor; preferences: HashiePreferences | null }>('/v1/me/preferences', credentials);
+  }
+
+  patchPreferences(preferences: PreferencesPatch, credentials: SessionCredentials) {
     return this.request<{ actor: HashieActor; preferences: HashiePreferences }>('/v1/me/preferences', { ...credentials, method: 'PATCH', body: preferences });
+  }
+
+  deletePreferences(credentials: SessionCredentials) {
+    return this.request<void>('/v1/me/preferences', { ...credentials, method: 'DELETE' });
+  }
+
+  upgradeGuestSession({ guestToken, clerkToken, idempotencyKey }: {
+    guestToken: string;
+    clerkToken: string;
+    idempotencyKey: string;
+  }) {
+    return this.request<{
+      actor: HashieActor;
+      alreadyUpgraded: boolean;
+      migratedPreferences: boolean;
+    }>('/v1/guest-sessions/upgrade', {
+      guestToken,
+      clerkToken,
+      allowBothCredentials: true,
+      headers: { 'idempotency-key': idempotencyKey },
+      method: 'POST',
+      body: { consent: true },
+    });
   }
 
   async streamAgent({ message, history, guestToken, clerkToken, signal, onText }: StreamAgentOptions): Promise<void> {
@@ -164,4 +204,28 @@ export function getGuestToken(): Promise<string | null> { return SecureStore.get
 export function saveGuestToken(token: string): Promise<void> {
   return SecureStore.setItemAsync(guestTokenStorageKey, token, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
 }
-export function clearGuestToken(): Promise<void> { return SecureStore.deleteItemAsync(guestTokenStorageKey); }
+export function getStoredActorChoice(): Promise<StoredActorChoice | null> {
+  return SecureStore.getItemAsync(activeActorStorageKey).then((value) => value === 'guest' || value === 'clerk-user' ? value : null);
+}
+export function saveStoredActorChoice(choice: StoredActorChoice): Promise<void> {
+  return SecureStore.setItemAsync(activeActorStorageKey, choice, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+}
+export function clearStoredActorChoice(): Promise<void> {
+  return SecureStore.deleteItemAsync(activeActorStorageKey);
+}
+export async function getGuestUpgradeIdempotencyKey(): Promise<string> {
+  const existing = await SecureStore.getItemAsync(guestUpgradeIdempotencyKeyStorageKey);
+  if (existing) return existing;
+  const key = randomUUID();
+  await SecureStore.setItemAsync(guestUpgradeIdempotencyKeyStorageKey, key, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+  return key;
+}
+export function clearGuestUpgradeIdempotencyKey(): Promise<void> {
+  return SecureStore.deleteItemAsync(guestUpgradeIdempotencyKeyStorageKey);
+}
+export async function clearGuestToken(): Promise<void> {
+  await Promise.all([
+    SecureStore.deleteItemAsync(guestTokenStorageKey),
+    clearGuestUpgradeIdempotencyKey(),
+  ]);
+}

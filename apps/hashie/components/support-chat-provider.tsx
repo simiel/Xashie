@@ -1,9 +1,9 @@
-import { createContext, type ReactNode, useContext, useMemo, useRef, useState } from 'react';
-import { useAuth } from '@clerk/expo';
 import { AccessibilityInfo } from 'react-native';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
+import { canApplyActorScopedUpdate } from '@/lib/actor-session';
 import { useOnboarding } from '@/components/onboarding-provider';
-import { getGuestToken, getHashieErrorMessage, HashieApiError, hashieApi } from '@/lib/hashie-api';
+import { getHashieErrorMessage, HashieApiError, hashieApi } from '@/lib/hashie-api';
 
 export type SupportMessage = {
   id: string;
@@ -13,6 +13,7 @@ export type SupportMessage = {
 };
 
 type SupportChatContextValue = {
+  actorKey: string | null;
   messages: SupportMessage[];
   isSending: boolean;
   error: string;
@@ -30,18 +31,40 @@ function announce(message: string) {
 }
 
 export function SupportChatProvider({ children }: { children: ReactNode }) {
-  const { getToken } = useAuth();
-  const { state: onboardingState } = useOnboarding();
-  const accessChoice = onboardingState.accessChoice;
+  const { actor, getActiveCredentials, handleAuthenticationFailure } = useOnboarding();
+  const actorKey = actor?.key ?? null;
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
   const abortRef = useRef<AbortController | null>(null);
-  const retryRef = useRef<string | null>(null);
+  const retryRef = useRef<{ actorKey: string; message: string } | null>(null);
+  const actorKeyRef = useRef<string | null>(actorKey);
+  const requestIdRef = useRef(0);
 
-  const send = async (rawMessage: string) => {
+  useEffect(() => {
+    if (actorKeyRef.current === actorKey) return;
+    actorKeyRef.current = actorKey;
+    requestIdRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    retryRef.current = null;
+    setMessages([]);
+    setError('');
+    setIsSending(false);
+  }, [actorKey]);
+
+  const isCurrentOperation = useCallback((requestId: number, requestActorKey: string) => canApplyActorScopedUpdate({
+    requestActorKey,
+    currentActorKey: actorKeyRef.current,
+    requestId,
+    currentRequestId: requestIdRef.current,
+  }), []);
+
+  const send = useCallback(async (rawMessage: string) => {
     const message = rawMessage.trim();
-    if (message.length < 2 || isSending) return false;
+    const requestActorKey = actorKeyRef.current;
+    if (message.length < 2 || isSending || !requestActorKey) return false;
+    const requestId = ++requestIdRef.current;
     setError('');
     const previousHistory = messages
       .filter((item) => item.status === 'complete' && item.content.trim().length > 0)
@@ -51,32 +74,37 @@ export function SupportChatProvider({ children }: { children: ReactNode }) {
     const assistantId = `assistant-${Date.now()}`;
     setMessages((current) => [...current, userMessage, { id: assistantId, role: 'assistant', content: '', status: 'streaming' }]);
     setIsSending(true);
-    retryRef.current = message;
+    retryRef.current = { actorKey: requestActorKey, message };
     announce('Hashie is preparing a response.');
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const clerkToken = accessChoice === 'google' ? await getToken() : null;
-      const guestToken = accessChoice === 'guest' ? await getGuestToken() : null;
-      if (!clerkToken && !guestToken) throw new HashieApiError('A private session is required.', 401, 'invalid_credentials');
+      const credentials = await getActiveCredentials(requestActorKey);
+      if (!credentials || !isCurrentOperation(requestId, requestActorKey)) return false;
       let receivedText = false;
       await hashieApi.streamAgent({
         message,
         history: previousHistory,
-        clerkToken,
-        guestToken,
+        ...credentials,
         signal: controller.signal,
         onText: (text) => {
+          if (!isCurrentOperation(requestId, requestActorKey)) return;
           if (!receivedText) announce('Hashie is replying.');
           receivedText = true;
           setMessages((current) => current.map((item) => item.id === assistantId ? { ...item, content: item.content + text } : item));
         },
       });
+      if (!isCurrentOperation(requestId, requestActorKey)) return false;
       if (!receivedText) throw new HashieApiError('Hashie sent an empty reply.', 502, 'service_unavailable');
       setMessages((current) => current.map((item) => item.id === assistantId ? { ...item, status: 'complete' } : item));
       announce('Hashie’s response is ready.');
       return true;
     } catch (caught) {
+      if (!isCurrentOperation(requestId, requestActorKey)) return false;
+      if (caught instanceof HashieApiError && caught.status === 401) {
+        await handleAuthenticationFailure(requestActorKey);
+        return false;
+      }
       if (caught instanceof HashieApiError && caught.code === 'aborted') {
         setMessages((current) => current.map((item) => item.id === assistantId ? { ...item, status: 'stopped', content: item.content || 'Reply stopped.' } : item));
         announce('Reply stopped.');
@@ -90,14 +118,19 @@ export function SupportChatProvider({ children }: { children: ReactNode }) {
       }
       return false;
     } finally {
-      abortRef.current = null;
-      setIsSending(false);
+      if (isCurrentOperation(requestId, requestActorKey)) {
+        abortRef.current = null;
+        setIsSending(false);
+      }
     }
-  };
+  }, [getActiveCredentials, handleAuthenticationFailure, isCurrentOperation, isSending, messages]);
 
-  const stop = () => abortRef.current?.abort();
-  const retry = async () => { if (retryRef.current) await send(retryRef.current); };
-  const value = useMemo(() => ({ messages, isSending, error, send, stop, retry, clearError: () => setError('') }), [accessChoice, messages, isSending, error]);
+  const stop = useCallback(() => abortRef.current?.abort(), []);
+  const retry = useCallback(async () => {
+    const retryState = retryRef.current;
+    if (retryState && retryState.actorKey === actorKeyRef.current) await send(retryState.message);
+  }, [send]);
+  const value = useMemo(() => ({ actorKey, messages, isSending, error, send, stop, retry, clearError: () => setError('') }), [actorKey, error, isSending, messages, retry, send, stop]);
   return <SupportChatContext.Provider value={value}>{children}</SupportChatContext.Provider>;
 }
 

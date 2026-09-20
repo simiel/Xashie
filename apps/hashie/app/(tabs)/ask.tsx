@@ -1,9 +1,9 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HashieLogo, PrivacyPill } from '@/components/hashie-ui';
+import { ActionButton, FeatureNotice, HashieLogo, PrivacyPill, ScreenScroll } from '@/components/hashie-ui';
 import { useOnboarding } from '@/components/onboarding-provider';
 import { type SupportMessage, useSupportChat } from '@/components/support-chat-provider';
 import { colors, controls, fonts, radii, spacing, textStyles } from '@/constants/design-system';
@@ -29,9 +29,10 @@ function MessageBubble({ item, largerText, higherContrast }: { item: SupportMess
 export default function AskScreen() {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<SupportMessage>>(null);
+  const currentActorKeyRef = useRef<string | null>(null);
   const [draft, setDraft] = useState('');
-  const { clearError, error, isSending, messages, retry, send, stop } = useSupportChat();
-  const { state } = useOnboarding();
+  const { actorKey, clearError, error, isSending, messages, retry, send, stop } = useSupportChat();
+  const { actor, sessionError, sessionStatus, state } = useOnboarding();
   const largerText = state.accessibilityPreferences.includes('larger-text');
   const higherContrast = state.accessibilityPreferences.includes('higher-contrast');
   const canSend = draft.trim().length >= 2 && !isSending;
@@ -41,13 +42,36 @@ export default function AskScreen() {
     return () => clearTimeout(timer);
   }, [messages]);
 
+  useEffect(() => {
+    currentActorKeyRef.current = actorKey;
+    setDraft('');
+  }, [actorKey]);
+
   const submit = async () => {
     if (!canSend) return;
     const message = draft;
+    const submittingActorKey = actorKey;
     setDraft('');
     const completed = await send(message);
-    if (!completed) setDraft(message);
+    if (!completed && submittingActorKey === currentActorKeyRef.current) setDraft(message);
   };
+
+  if (sessionStatus === 'loading') {
+    return <ScreenScroll contentContainerStyle={{ flexGrow: 1, gap: spacing.lg, justifyContent: 'center' }}><Stack.Screen options={{ title: 'Ask Hashie' }} /><ActivityIndicator accessibilityLabel="Restoring your private session" color={colors.focus} /><Text accessibilityLiveRegion="polite" style={[textStyles.body, { textAlign: 'center' }]}>Restoring your private session…</Text></ScreenScroll>;
+  }
+
+  if (!actor) {
+    return <ScreenScroll contentContainerStyle={{ flexGrow: 1, gap: spacing.lg, justifyContent: 'center' }}>
+      <Stack.Screen options={{ title: 'Ask Hashie' }} />
+      <View style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: radii.lg, borderWidth: 1, gap: spacing.md, padding: spacing.lg }}>
+        <Text style={textStyles.heading1} selectable>Start a private session first</Text>
+        <Text style={textStyles.body} selectable>{sessionError || 'Ask Hashie needs an active guest session or signed-in account. The learning library remains available without one.'}</Text>
+        <ActionButton onPress={() => router.push('/onboarding/access')} accessibilityLabel="Choose a private session">Choose a private session</ActionButton>
+        <ActionButton onPress={() => router.push('/learn')} variant="secondary" accessibilityLabel="Open the offline learning library">Browse the offline library</ActionButton>
+      </View>
+      <FeatureNotice tone="blue"><Text style={textStyles.body} selectable>Hashie gives educational support, not diagnoses or emergency care. Do not include names, phone numbers, or addresses in a question.</Text></FeatureNotice>
+    </ScreenScroll>;
+  }
 
   return (
     <KeyboardAvoidingView behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'} style={{ backgroundColor: higherContrast ? colors.surface : colors.background, flex: 1 }}>

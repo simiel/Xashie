@@ -8,9 +8,9 @@ import { accessibilityOptions } from '@/constants/onboarding';
 import { colors, fonts, spacing, textStyles } from '@/constants/design-system';
 
 export default function AccessibilityScreen() {
-  const { state, completeOnboarding, isConnecting, submissionError, toggleAccessibilityPreference } = useOnboarding();
+  const { state, completeOnboarding, isConnecting, isEditingPreferences, submissionError, toggleAccessibilityPreference } = useOnboarding();
   const finish = async () => {
-    if (await completeOnboarding()) router.replace('/(tabs)');
+    if (await completeOnboarding()) router.replace(isEditingPreferences ? '/profile' : '/(tabs)');
   };
   return (
     <OnboardingScreen step={5} title="How can we make Hashie easier to use?" body="Choose any that would help. These preferences can be changed anytime in Profile and are saved to your active session." onContinue={finish} onSkip={finish} continueLabel={isConnecting ? 'Saving…' : 'Finish setup'} testID="finish-onboarding" canContinue={!isConnecting}>

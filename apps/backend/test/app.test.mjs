@@ -171,6 +171,38 @@ test('guest upgrade requires consent, migrates once, and is idempotent', async (
   assert.equal(repeatWithClerkOnly.response.status, 200);
 });
 
+test('guest upgrade uses the production merge contract when account preferences already exist', async () => {
+  const { app } = setup();
+  const created = await call(app, '/v1/guest-sessions', { method: 'POST' });
+  const token = created.body.token;
+  await call(app, '/v1/me/preferences', {
+    method: 'PATCH',
+    headers: { 'x-hashie-guest-token': token },
+    body: JSON.stringify({ language: 'akan-twi', nickname: 'Ama', ageGroup: '16-17', accessibilityPreferences: ['captions', 'visual-details'] }),
+  });
+  await call(app, '/v1/me/preferences', {
+    method: 'PATCH',
+    headers: { authorization: 'Bearer clerk-token' },
+    body: JSON.stringify({ language: 'english', nickname: null, ageGroup: '18-24', accessibilityPreferences: ['larger-text', 'captions'] }),
+  });
+  const headers = { 'x-hashie-guest-token': token, authorization: 'Bearer clerk-token', 'idempotency-key': 'upgrade-merge-key' };
+  const upgraded = await call(app, '/v1/guest-sessions/upgrade', { method: 'POST', headers, body: JSON.stringify({ consent: true }) });
+  assert.equal(upgraded.response.status, 200);
+  assert.equal(upgraded.body.migratedPreferences, true);
+  const preferences = await call(app, '/v1/me/preferences', { headers: { authorization: 'Bearer clerk-token' } });
+  assert.deepEqual(preferences.body.preferences, {
+    language: 'english',
+    nickname: 'Ama',
+    ageGroup: '18-24',
+    accessibilityPreferences: ['larger-text', 'captions', 'visual-details'],
+    updatedAt: '2026-09-16T12:00:00.000Z',
+  });
+  const repeated = await call(app, '/v1/guest-sessions/upgrade', { method: 'POST', headers, body: JSON.stringify({ consent: true }) });
+  assert.equal(repeated.response.status, 200);
+  assert.equal(repeated.body.alreadyUpgraded, true);
+  assert.equal(repeated.body.migratedPreferences, false);
+});
+
 test('delete is scoped to the authenticated owner', async () => {
   const { app } = setup();
   const first = await call(app, '/v1/guest-sessions', { method: 'POST' });

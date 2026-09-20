@@ -18,3 +18,9 @@ Ask Hashie keeps its message list only in the running app session. It does not s
 Configure Google OAuth client settings in the Clerk Dashboard. Do not put Google client IDs or secrets in source or this env file. Never add `CLERK_SECRET_KEY`, `CLERK_JWT_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, database credentials, an OpenAI key, or any other server credential to the mobile app. Those belong in the backend or managed provider configuration.
 
 Real local env files are ignored by Git (`.env` and `.env*.local`); keep `.env.example` tracked as the placeholder template.
+
+## Clerk environment diagnostic
+
+Hashie mobile and its backend must use the same Clerk environment: development/test mobile configuration must call a backend configured to verify that same environment, and production mobile configuration must call the production backend. A publishable key is client-safe, but never print or copy its value, Clerk session tokens, backend Clerk secrets, or Cloud Run secret values into logs, tickets, screenshots, or source files.
+
+For a safe local check, verify only that the mobile configuration has a client-safe publishable key and backend URL configured, then confirm the key mode (`pk_test_` or `pk_live_`) matches the backend's server-only Clerk configuration. `npx expo config --type public` verifies Expo plugins, scheme, and bundle identifiers; it does not prove that deployed Cloud Run Secret Manager values match the mobile environment. That deployed-secret match requires an authorized production operator to inspect managed configuration without disclosing values.
