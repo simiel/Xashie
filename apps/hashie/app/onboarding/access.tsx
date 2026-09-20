@@ -46,6 +46,27 @@ export default function AccessScreen() {
     }
     setIsGoogleConnecting(true);
     try {
+      const continueWithGoogleBrowser = async () => {
+        const { createdSessionId, setActive, authSessionResult } = await startSSOFlow({
+          strategy: 'oauth_google',
+        });
+        if (!authSessionResult) {
+          setNotice('Google sign-in could not be started. Please try again.');
+          return false;
+        }
+        if (authSessionResult.type !== 'success') {
+          setNotice(authSessionResult.type === 'cancel'
+            ? 'Google sign-in was canceled. You can try again or continue as a guest.'
+            : 'Google sign-in could not be completed. You can try again or continue as a guest.');
+          return false;
+        }
+        if (!createdSessionId || !setActive) {
+          setNotice('Google sign-in did not finish. You can try again or continue as a guest.');
+          return false;
+        }
+        await setActive({ session: createdSessionId });
+        return true;
+      };
       const needsFreshGoogleSignIn = !isSignedIn || sessionRecovery === 'clerk-expired';
       if (sessionRecovery === 'clerk-expired' && isSignedIn && !(await signOutAccount())) {
         setNotice('Please finish signing out before trying another Google sign-in.');
@@ -53,27 +74,31 @@ export default function AccessScreen() {
       }
       if (needsFreshGoogleSignIn) {
         if (Platform.OS === 'android') {
-          const { createdSessionId, setActive } = await startGoogleAuthenticationFlow();
-          // Clerk resolves a dismissed native account picker with no session.
-          if (!createdSessionId) return;
-          if (!setActive) {
-            setNotice('Google sign-in did not finish. You can try again or continue as a guest.');
-            return;
+          try {
+            const { createdSessionId, setActive } = await startGoogleAuthenticationFlow();
+            // A provider can resolve without a session when Credential Manager has no
+            // usable credential. Give the user Clerk's browser flow as a recovery path.
+            if (!createdSessionId) {
+              const browserSignedIn = await continueWithGoogleBrowser();
+              if (!browserSignedIn) return;
+            } else {
+              if (!setActive) {
+                setNotice('Google sign-in did not finish. You can try again or continue as a guest.');
+                return;
+              }
+              await setActive({ session: createdSessionId });
+            }
+          } catch {
+            // Credential Manager can reject before rendering its chooser when the phone has no
+            // usable saved credential or the provider is temporarily unavailable. Fall back to
+            // Clerk's browser flow so the user still has an explicit, recoverable path.
+            const browserSignedIn = await continueWithGoogleBrowser();
+            if (!browserSignedIn) return;
           }
-          await setActive({ session: createdSessionId });
         } else {
           // Keep the existing browser-based Clerk flow on iOS and web.
-          const { createdSessionId, setActive, authSessionResult } = await startSSOFlow({ strategy: 'oauth_google' });
-          if (!authSessionResult) {
-            setNotice('Google sign-in could not be started. Please try again.');
-            return;
-          }
-          if (authSessionResult.type !== 'success') return;
-          if (!createdSessionId || !setActive) {
-            setNotice('Google sign-in did not finish. You can try again or continue as a guest.');
-            return;
-          }
-          await setActive({ session: createdSessionId });
+          const browserSignedIn = await continueWithGoogleBrowser();
+          if (!browserSignedIn) return;
         }
       }
       const result = await activateSignedInActor();
