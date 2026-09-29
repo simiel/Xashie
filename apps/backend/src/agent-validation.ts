@@ -16,17 +16,26 @@ export function parseAgentRequest(input: unknown): AgentRequest {
 }
 
 function parseHistory(input: unknown): AgentHistoryMessage[] {
-  if (!Array.isArray(input) || input.length > maxHistoryMessages) throw new ValidationError(`History must contain at most ${maxHistoryMessages} messages.`);
-  let characters = 0;
-  const history = input.map((item) => {
+  if (!Array.isArray(input)) throw new ValidationError('History must be an array.');
+  const validated = input.map((item) => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) throw new ValidationError('Each history item must be an object.');
     const value = item as Record<string, unknown>;
     if (value.role !== 'user' && value.role !== 'assistant') throw new ValidationError('History roles must be user or assistant.');
-    const content = parseText(value.content, 'History content');
-    characters += content.length;
+    if (typeof value.content !== 'string') throw new ValidationError('History content must be text.');
+    const content = value.content.trim();
     return { role: value.role as AgentHistoryMessage['role'], content };
   });
-  if (characters > maxHistoryCharacters) throw new ValidationError(`History must not exceed ${maxHistoryCharacters} characters.`);
+
+  const history: AgentHistoryMessage[] = [];
+  let remainingCharacters = maxHistoryCharacters;
+  for (let index = validated.length - 1; index >= 0 && history.length < maxHistoryMessages; index -= 1) {
+    const item = validated[index];
+    if (item.content.length < 2 || remainingCharacters < 2) continue;
+    const content = item.content.slice(0, Math.min(maxMessageLength, remainingCharacters)).trim();
+    if (content.length < 2) continue;
+    history.unshift({ role: item.role, content });
+    remainingCharacters -= content.length;
+  }
   return history;
 }
 

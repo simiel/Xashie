@@ -38,7 +38,7 @@
     "web": "expo start --web",
     "check:google-config": "node scripts/validate-google-sign-in-config.cjs",
     "eas-build-pre-install": "npm run check:google-config",
-    "test:session": "tsc --ignoreConfig --ignoreDeprecations 6.0 --target es2022 --module commonjs --moduleResolution node --outDir .test-build lib/actor-session.ts lib/google-sign-in.ts lib/post-google-sign-in.ts && node --test test/actor-session.test.cjs test/google-sign-in.test.cjs test/post-google-sign-in.test.cjs"
+    "test:session": "tsc --ignoreConfig --ignoreDeprecations 6.0 --target es2022 --module commonjs --moduleResolution node --outDir .test-build lib/actor-session.ts lib/agent-history.ts lib/google-sign-in.ts lib/post-google-sign-in.ts && node --test test/actor-session.test.cjs test/agent-history.test.cjs test/google-sign-in.test.cjs test/post-google-sign-in.test.cjs"
   },
   "private": true
 }

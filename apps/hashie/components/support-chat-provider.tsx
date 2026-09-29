@@ -2,6 +2,7 @@ import { AccessibilityInfo } from 'react-native';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { canApplyActorScopedUpdate } from '@/lib/actor-session';
+import { compactAgentHistory } from '@/lib/agent-history';
 import { useOnboarding } from '@/components/onboarding-provider';
 import { getHashieErrorMessage, HashieApiError, hashieApi } from '@/lib/hashie-api';
 
@@ -24,8 +25,6 @@ type SupportChatContextValue = {
 };
 
 const SupportChatContext = createContext<SupportChatContextValue | null>(null);
-const historyLimit = 8;
-
 function announce(message: string) {
   AccessibilityInfo.announceForAccessibility(message);
 }
@@ -66,10 +65,9 @@ export function SupportChatProvider({ children }: { children: ReactNode }) {
     if (message.length < 2 || isSending || !requestActorKey) return false;
     const requestId = ++requestIdRef.current;
     setError('');
-    const previousHistory = messages
+    const previousHistory = compactAgentHistory(messages
       .filter((item) => item.status === 'complete' && item.content.trim().length > 0)
-      .slice(-historyLimit)
-      .map((item) => ({ role: item.role, content: item.content }));
+      .map((item) => ({ role: item.role, content: item.content })));
     const userMessage: SupportMessage = { id: `user-${Date.now()}`, role: 'user', content: message, status: 'complete' };
     const assistantId = `assistant-${Date.now()}`;
     setMessages((current) => [...current, userMessage, { id: assistantId, role: 'assistant', content: '', status: 'streaming' }]);

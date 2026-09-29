@@ -36,6 +36,8 @@ export default function AskScreen() {
   const largerText = state.accessibilityPreferences.includes('larger-text');
   const higherContrast = state.accessibilityPreferences.includes('higher-contrast');
   const canSend = draft.trim().length >= 2 && !isSending;
+  const characterCount = draft.length;
+  const nearCharacterLimit = characterCount >= 1_080;
 
   useEffect(() => {
     const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: messages.length > 1 }), 60);
@@ -118,6 +120,7 @@ export default function AskScreen() {
           <TextInput accessibilityHint="Your question is sent to Hashie’s model service when you choose Send" accessibilityLabel="Your health question" autoCapitalize="sentences" maxLength={1200} multiline onChangeText={setDraft} placeholder="Type your question…" placeholderTextColor={colors.textMuted} style={{ color: colors.textPrimary, flex: 1, fontFamily: fonts.body, fontSize: largerText ? 18 : 16, lineHeight: largerText ? 28 : 23, maxHeight: 120, minHeight: 40, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }} value={draft} />
           {isSending ? <Pressable accessibilityLabel="Stop generating reply" accessibilityRole="button" onPress={stop} style={({ pressed }) => ({ alignItems: 'center', backgroundColor: colors.urgentSoft, borderRadius: radii.pill, justifyContent: 'center', minHeight: controls.minTouchTarget, opacity: pressed ? 0.72 : 1, width: controls.minTouchTarget })}><Text style={{ color: colors.urgent, fontFamily: fonts.bold, fontSize: 16 }}>■</Text></Pressable> : <Pressable accessibilityLabel="Send question" accessibilityRole="button" accessibilityState={{ disabled: !canSend }} disabled={!canSend} onPress={submit} style={({ pressed }) => ({ alignItems: 'center', backgroundColor: canSend ? colors.accent : colors.disabled, borderRadius: radii.pill, justifyContent: 'center', minHeight: controls.minTouchTarget, opacity: pressed ? 0.72 : 1, width: controls.minTouchTarget })}><Text style={{ color: canSend ? colors.textPrimary : colors.textMuted, fontFamily: fonts.bold, fontSize: 18 }}>↑</Text></Pressable>}
         </View>
+        <Text accessibilityLabel={`Message character count: ${characterCount} of 1,200${nearCharacterLimit ? ', limit approaching' : ''}`} style={[textStyles.caption, { color: nearCharacterLimit ? colors.urgent : colors.textMuted, paddingHorizontal: spacing.xs }, largerText && { fontSize: 15, lineHeight: 22 }]}>{characterCount} / 1,200 characters{nearCharacterLimit ? ' — limit approaching' : ''}</Text>
         {/* <Text selectable style={[textStyles.caption, { color: higherContrast ? colors.textPrimary : colors.textMuted, paddingHorizontal: spacing.xs }, largerText && { fontSize: 15, lineHeight: 22 }]}>Responses are educational. If someone may be in immediate danger, contact local emergency services or a trusted adult now.</Text> */}
       </View>
     </KeyboardAvoidingView>
