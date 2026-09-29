@@ -15,7 +15,11 @@ Expo makes `EXPO_PUBLIC_*` values available to the client bundle, so treat them 
 
 Ask Hashie keeps its message list only in the running app session. It does not save chat content in SecureStore, AsyncStorage, or Hashie’s database. Messages are sent to the server-owned agent service to produce a reply; its model gateway may retain requests. Users should avoid including names, phone numbers, addresses, or other identifying details in a message.
 
-Configure Google OAuth client settings in the Clerk Dashboard. Do not put Google client IDs or secrets in source or this env file. Never add `CLERK_SECRET_KEY`, `CLERK_JWT_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, database credentials, an OpenAI key, or any other server credential to the mobile app. Those belong in the backend or managed provider configuration.
+Google uses Clerk's native flow on iOS and Android and Clerk browser SSO on web. Supply the public client configuration through the matching EAS `development`, `preview`, or `production` environment: `EXPO_PUBLIC_CLERK_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_CLERK_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_CLERK_GOOGLE_ANDROID_CLIENT_ID`, and `EXPO_PUBLIC_CLERK_GOOGLE_IOS_URL_SCHEME`. Run `npm run check:google-config` before a local native build; EAS runs the same check before installing dependencies. Do not put these values in `eas.json`.
+
+Register each Android signing SHA-1 actually used by local, preview, and production artifacts in Google Cloud, and register the iOS bundle ID and Team ID/App ID Prefix in Clerk. The detailed setup and test sequence is in [`../../prompts/google-sign-in-architecture-audit.md`](../../prompts/google-sign-in-architecture-audit.md).
+
+Never add `CLERK_SECRET_KEY`, Google client secrets, `CLERK_JWT_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, database credentials, an OpenAI key, or any other server credential to the mobile app. Those belong in the backend or managed provider configuration.
 
 Real local env files are ignored by Git (`.env` and `.env*.local`); keep `.env.example` tracked as the placeholder template.
 

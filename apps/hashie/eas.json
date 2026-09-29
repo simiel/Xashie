@@ -4,15 +4,22 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development"
+    },
     "preview": {
       "distribution": "internal",
       "autoIncrement": true,
+      "environment": "preview",
       "android": {
         "buildType": "apk"
-      },
-      "env":{
-        "EXPO_PUBLIC_CLERK_GOOGLE_IOS_URL_SCHEME": "com.googleusercontent.apps.239035662159-87mads2q58ou1kgph06l0ga8g5l01cfp"
       }
+    },
+    "production": {
+      "autoIncrement": true,
+      "environment": "production"
     }
   }
 }

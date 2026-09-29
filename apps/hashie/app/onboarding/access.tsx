@@ -1,32 +1,62 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { Platform, Text, View } from 'react-native';
 import { useAuth, useSSO } from '@clerk/expo';
-import { useSignInWithGoogle } from '@clerk/expo/google';
 
 import { ActionButton, FeatureNotice } from '@/components/hashie-ui';
 import { OnboardingScreen } from '@/components/onboarding-screen';
 import { useOnboarding } from '@/components/onboarding-provider';
+import { useNativeGoogleSignIn } from '@/components/use-native-google-sign-in';
 import { colors, spacing, textStyles } from '@/constants/design-system';
+import { classifyNativeGoogleSignInError } from '@/lib/google-sign-in';
+import { postGoogleSignInAction } from '@/lib/post-google-sign-in';
 
 export default function AccessScreen() {
   const {
-    activateSignedInActor,
     actor,
     beginGuestSession,
     clearSubmissionError,
+    hasGuestUpgradeAvailable,
+    hasSavedPreferences,
     isConnecting,
+    refreshSession,
     sessionError,
     sessionRecovery,
+    sessionStatus,
     signOutAccount,
     submissionError,
   } = useOnboarding();
   const { isLoaded: isClerkLoaded, isSignedIn } = useAuth();
   const { startSSOFlow } = useSSO();
-  const { startGoogleAuthenticationFlow } = useSignInWithGoogle();
+  const { startNativeGoogleSignIn } = useNativeGoogleSignIn();
   const [notice, setNotice] = useState('');
   const [isGoogleConnecting, setIsGoogleConnecting] = useState(false);
-  const isSubmitting = isConnecting || isGoogleConnecting;
+  const [isAwaitingSessionActivation, setIsAwaitingSessionActivation] = useState(false);
+  const isSubmitting = isConnecting || isGoogleConnecting || isAwaitingSessionActivation;
+
+  useEffect(() => {
+    if (!isAwaitingSessionActivation) return;
+    const action = postGoogleSignInAction({
+      isClerkLoaded,
+      isSignedIn: isSignedIn === true,
+      sessionStatus,
+      sessionRecovery,
+      actorType: actor?.type ?? null,
+      hasSavedPreferences,
+      hasGuestUpgradeAvailable,
+    });
+    if (action.type === 'wait') return;
+    setIsAwaitingSessionActivation(false);
+    if (action.type === 'error') {
+      setNotice(sessionError || 'Your signed-in session could not be activated. Please try again.');
+      return;
+    }
+    router.replace(action.destination === 'upgrade'
+      ? '/onboarding/upgrade'
+      : action.destination === 'tabs'
+        ? '/(tabs)'
+        : '/onboarding/language');
+  }, [actor?.type, hasGuestUpgradeAvailable, hasSavedPreferences, isAwaitingSessionActivation, isClerkLoaded, isSignedIn, sessionError, sessionRecovery, sessionStatus]);
   const continueAsGuest = async () => {
     setNotice('');
     clearSubmissionError();
@@ -55,9 +85,9 @@ export default function AccessScreen() {
           return false;
         }
         if (authSessionResult.type !== 'success') {
-          setNotice(authSessionResult.type === 'cancel'
-            ? 'Google sign-in was canceled. You can try again or continue as a guest.'
-            : 'Google sign-in could not be completed. You can try again or continue as a guest.');
+          if (authSessionResult.type !== 'cancel') {
+            setNotice('Google sign-in could not be completed. You can try again or continue as a guest.');
+          }
           return false;
         }
         if (!createdSessionId || !setActive) {
@@ -73,37 +103,41 @@ export default function AccessScreen() {
         return;
       }
       if (needsFreshGoogleSignIn) {
-        if (Platform.OS === 'android') {
+        if (Platform.OS === 'ios' || Platform.OS === 'android') {
           try {
-            const { createdSessionId, setActive } = await startGoogleAuthenticationFlow();
-            // A provider can resolve without a session when Credential Manager has no
-            // usable credential. Give the user Clerk's browser flow as a recovery path.
+            const { createdSessionId, setActive } = await startNativeGoogleSignIn();
             if (!createdSessionId) {
-              const browserSignedIn = await continueWithGoogleBrowser();
-              if (!browserSignedIn) return;
-            } else {
-              if (!setActive) {
-                setNotice('Google sign-in did not finish. You can try again or continue as a guest.');
-                return;
-              }
-              await setActive({ session: createdSessionId });
+              // Clerk returns no session when the native picker is cancelled. Do not
+              // turn this into browser SSO or an error state.
+              return;
             }
-          } catch {
-            // Credential Manager can reject before rendering its chooser when the phone has no
-            // usable saved credential or the provider is temporarily unavailable. Fall back to
-            // Clerk's browser flow so the user still has an explicit, recoverable path.
-            const browserSignedIn = await continueWithGoogleBrowser();
-            if (!browserSignedIn) return;
+            if (!setActive) {
+              setNotice('Google sign-in did not finish. You can try again or continue as a guest.');
+              return;
+            }
+            await setActive({ session: createdSessionId });
+          } catch (error) {
+            const issue = classifyNativeGoogleSignInError(error);
+            if (__DEV__ && issue.kind !== 'cancelled') {
+              console.info('[Hashie auth] Native Google sign-in failed', { code: issue.diagnosticCode });
+            }
+            if (issue.notice) setNotice(issue.notice);
+            return;
           }
-        } else {
-          // Keep the existing browser-based Clerk flow on iOS and web.
+        } else if (Platform.OS === 'web') {
           const browserSignedIn = await continueWithGoogleBrowser();
           if (!browserSignedIn) return;
+        } else {
+          setNotice('Google sign-in is not supported on this platform. Please continue as a guest.');
+          return;
         }
+        // `setActive` updates Clerk outside this render. Wait for OnboardingProvider's
+        // Clerk-state effect to observe the new session before requesting the backend actor.
+        setIsAwaitingSessionActivation(true);
+        return;
       }
-      const result = await activateSignedInActor();
-      const shouldOfferUpgrade = result.guestUpgradeAvailable && actor?.type === 'guest';
-      router.replace(shouldOfferUpgrade ? '/onboarding/upgrade' : result.hasSavedPreferences ? '/(tabs)' : '/onboarding/language');
+      setIsAwaitingSessionActivation(true);
+      await refreshSession();
     } catch {
       setNotice(sessionRecovery === 'clerk-expired'
         ? 'This account needs to sign out and sign in again before it can be used.'
@@ -117,7 +151,7 @@ export default function AccessScreen() {
     <OnboardingScreen step={1} title="How would you like to begin?" body="Start privately as a guest, or sign in with Google to keep your preferences with your Hashie account." onContinue={continueAsGuest} hideNavigation>
       <View style={{ gap: spacing.sm }}>
         <ActionButton onPress={continueAsGuest} disabled={isSubmitting} testID="continue-guest" accessibilityLabel="Continue as a guest">{isConnecting ? 'Connecting…' : 'Continue as a guest  →'}</ActionButton>
-        <ActionButton onPress={continueWithGoogle} disabled={isSubmitting} variant="secondary" testID="continue-google" accessibilityLabel="Continue with Google">{isGoogleConnecting ? 'Connecting…' : 'Continue with Google  ↗'}</ActionButton>
+        <ActionButton onPress={continueWithGoogle} disabled={isSubmitting} variant="secondary" testID="continue-google" accessibilityLabel="Continue with Google">{isGoogleConnecting || isAwaitingSessionActivation ? 'Connecting…' : 'Continue with Google  ↗'}</ActionButton>
       </View>
       {notice || submissionError || sessionError ? <FeatureNotice tone="blue"><Text style={[textStyles.bodyStrong, { color: colors.textPrimary }]} accessibilityRole="alert" selectable>{notice || submissionError || sessionError}</Text></FeatureNotice> : null}
       <Text style={textStyles.caption} selectable>Guest access is private for this session. Google sign-in is handled securely by Clerk.</Text>

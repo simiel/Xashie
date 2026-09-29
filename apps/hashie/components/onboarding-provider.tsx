@@ -25,6 +25,7 @@ import {
   type PreferencesPatch,
   type SessionCredentials,
 } from '@/lib/hashie-api';
+import { sessionActivationDiagnostic } from '@/lib/post-google-sign-in';
 import {
   type AccessibilityPreference,
   initialOnboardingState,
@@ -153,9 +154,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const inspectClerk = useCallback(async (): Promise<{ state: CredentialState; actor: HashieActor | null }> => {
-    if (!isSignedIn) return { state: 'missing', actor: null };
     const clerkToken = await getToken();
-    if (!clerkToken) return { state: 'expired', actor: null };
+    if (!clerkToken) return { state: isSignedIn ? 'expired' : 'missing', actor: null };
     try {
       const session = await hashieApi.getSession({ clerkToken });
       if (session.status !== 'authenticated' || !session.actor || session.actor.type !== 'clerk-user') {
@@ -242,6 +242,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       else setSignedOut(decision.recovery);
     } catch (error) {
       if (requestId !== restoreRequestRef.current) return;
+      if (__DEV__) console.info('[Hashie auth] Session activation failed', sessionActivationDiagnostic(error));
       if (error instanceof HashieApiError && error.status === 401) {
         if (restoringChoice === 'guest') {
           await clearGuestToken();
