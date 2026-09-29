@@ -3,6 +3,11 @@ import { StoreError, ValidationError } from './errors.js';
 const embeddingDimensions = 1536;
 const defaultEmbeddingModel = 'text-embedding-3-small';
 
+// Agent generation must retrieve this small, server-owned evidence set before
+// contacting the model. Keep this separate from the broader library-search
+// defaults so product retrieval policy is deliberate and testable.
+export const agentRetrievalPolicy = { threshold: 0.55, limit: 4 } as const;
+
 export type KnowledgeDocument = {
   sourceId: string;
   contentHash: string;

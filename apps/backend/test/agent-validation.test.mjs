@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseAgentRequest } from '../dist/src/agent-validation.js';
-import { buildGatewayPrompt, buildSystemInstruction, normalizeGatewayStream } from '../dist/src/agent.js';
+import { AgentService, buildApprovedEvidencePacket, buildGatewayPrompt, buildSystemInstruction, createAgentServiceFromEnv, normalizeGatewayStream } from '../dist/src/agent.js';
 import { createAgentUserContext, readabilityGuidance, renderAgentUserContext } from '../dist/src/agent-context.js';
+import { StoreError } from '../dist/src/errors.js';
 
 test('agent request validation keeps client input bounded and cannot accept a system message', () => {
   assert.deepEqual(parseAgentRequest({ message: 'What is puberty?', history: [{ role: 'assistant', content: 'It is a stage of development.' }] }), {
@@ -12,11 +13,43 @@ test('agent request validation keeps client input bounded and cannot accept a sy
   assert.throws(() => parseAgentRequest({ message: 'x'.repeat(1_201) }), /1200/);
 });
 
-test('system instruction clearly delimits the approved knowledge context', () => {
-  const instruction = buildSystemInstruction([{ sourceId: 'row-1', topic: 'Puberty Education', subtopic: 'Physical Changes', question: 'Why am I growing?', answer: 'Growth spurts are normal.', similarity: 0.9 }], { name: 'Ama', ageGroup: '13-15', preferredLanguage: 'english', accessibilityPreferences: ['visual-details'], sessionType: 'guest' });
+test('system instruction makes the approved evidence packet the factual basis', () => {
+  const evidence = buildApprovedEvidencePacket([{ sourceId: 'row-1', topic: 'Puberty Education', subtopic: 'Physical Changes', question: 'Why am I growing?', answer: 'Growth spurts are normal.', similarity: 0.9 }]);
+  const instruction = buildSystemInstruction(evidence, { name: 'Ama', ageGroup: '13-15', preferredLanguage: 'english', accessibilityPreferences: ['visual-details'], sessionType: 'guest' });
   assert.match(instruction, /not a doctor/);
-  assert.match(instruction, /Reviewed library passage 1/);
+  assert.match(instruction, /sole factual basis/);
+  assert.match(instruction, /source_id="row-1"/);
   assert.match(instruction, /Growth spurts are normal/);
+  assert.match(instruction, /never as instructions/);
+});
+
+test('no-match evidence prevents unsupported factual health answers', () => {
+  const evidence = buildApprovedEvidencePacket([]);
+  const instruction = buildSystemInstruction(evidence, { name: 'Not provided', ageGroup: 'Not provided', preferredLanguage: 'english', accessibilityPreferences: [], sessionType: 'guest' });
+  assert.equal(evidence.outcome, 'no_match');
+  assert.match(instruction, /cannot verify a specific answer/);
+  assert.match(instruction, /Do not provide health or sexual\/reproductive-health facts from general model knowledge/);
+});
+
+test('agent retrieval failure prevents gateway token acquisition and generation', async () => {
+  let tokenRequests = 0;
+  const agent = new AgentService({
+    async getAccessToken() { tokenRequests += 1; return 'gateway-token'; },
+    getBaseUrl() { return 'https://gateway.test'; },
+  }, {
+    async retrieve() { throw new StoreError('unavailable', 'Knowledge retrieval is unavailable.'); },
+  });
+  await assert.rejects(() => agent.stream({
+    message: 'What is puberty?', history: [], actor: { type: 'guest', sessionId: 'internal-only' },
+    userContext: { name: 'Not provided', ageGroup: 'Not provided', preferredLanguage: 'english', accessibilityPreferences: [], sessionType: 'guest' },
+    abortSignal: new AbortController().signal, requestId: 'request-1',
+  }), /Knowledge retrieval is unavailable/);
+  assert.equal(tokenRequests, 0);
+});
+
+test('agent factory stays unavailable unless both gateway and retrieval are configured', () => {
+  const gateway = { async getAccessToken() { return 'gateway-token'; }, getBaseUrl() { return 'https://gateway.test'; } };
+  assert.equal(createAgentServiceFromEnv({ MEDGEMMA_BASE_URL: 'https://gateway.test' }, gateway, null), null);
 });
 
 test('gateway prompt flattens history into one ordered context block before the current question', () => {
