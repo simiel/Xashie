@@ -105,14 +105,24 @@ function requestCredentials(request: Request): { guestToken: string | null; bear
   return { guestToken, bearerToken };
 }
 
-async function resolveClerk(bearerToken: string, verifier: ClerkVerifier): Promise<Actor> {
+function logClerkRejection(requestId: string, verification: Extract<ClerkVerification, { status: 'invalid' }>): void {
+  if (!verification.diagnostic) return;
+  // Never log a token, session ID, user ID, or Clerk secret. These bounded values
+  // identify a configuration mismatch in Render without disclosing account data.
+  console.warn('[Hashie auth] Clerk token rejected', { requestId, ...verification.diagnostic });
+}
+
+async function resolveClerk(bearerToken: string, verifier: ClerkVerifier, requestId: string): Promise<Actor> {
   const verification: ClerkVerification = await verifier.verifyBearerToken(bearerToken);
-  if (verification.status !== 'authenticated') throw new ApiError(401, 'invalid_credentials', 'Credentials are invalid or expired.');
+  if (verification.status !== 'authenticated') {
+    logClerkRejection(requestId, verification);
+    throw new ApiError(401, 'invalid_credentials', 'Credentials are invalid or expired.');
+  }
   const identity: ClerkIdentity = verification.identity;
   return { type: 'clerk-user', userId: identity.userId, sessionId: identity.sessionId };
 }
 
-async function resolveActor(request: Request, deps: AppDependencies, now: Date): Promise<ResolvedActor> {
+async function resolveActor(request: Request, deps: AppDependencies, now: Date, requestId: string): Promise<ResolvedActor> {
   const { guestToken, bearerToken } = requestCredentials(request);
   if (guestToken) {
     const record = await deps.store.findGuestSessionByTokenHash(hashSecret(guestToken));
@@ -121,7 +131,7 @@ async function resolveActor(request: Request, deps: AppDependencies, now: Date):
     }
     return { type: 'guest', sessionId: record.id };
   }
-  if (bearerToken) return resolveClerk(bearerToken, deps.clerk);
+  if (bearerToken) return resolveClerk(bearerToken, deps.clerk, requestId);
   return { type: 'signed-out' };
 }
 
@@ -130,13 +140,13 @@ function requireActor(actor: ResolvedActor): Actor {
   return actor;
 }
 
-async function resolveUpgrade(request: Request, deps: AppDependencies, now: Date): Promise<{ guest: Actor & { type: 'guest' }; clerk: Actor & { type: 'clerk-user' } }> {
+async function resolveUpgrade(request: Request, deps: AppDependencies, now: Date, requestId: string): Promise<{ guest: Actor & { type: 'guest' }; clerk: Actor & { type: 'clerk-user' } }> {
   const guestToken = request.headers.get('x-hashie-guest-token');
   const bearerToken = parseBearerToken(request.headers.get('authorization'));
   if (!guestToken || !bearerToken) throw new ApiError(401, 'unauthorized', 'Guest and Clerk credentials are required for upgrade.');
   const record = await deps.store.findGuestSessionByTokenHash(hashSecret(guestToken));
   if (!record || (!record.revokedAt && isExpired(record.expiresAt, now))) throw new ApiError(401, 'invalid_credentials', 'Guest credentials are invalid or expired.');
-  const clerk = await resolveClerk(bearerToken, deps.clerk);
+  const clerk = await resolveClerk(bearerToken, deps.clerk, requestId);
   return { guest: { type: 'guest', sessionId: record.id }, clerk: clerk as Actor & { type: 'clerk-user' } };
 }
 
@@ -189,7 +199,7 @@ export function createApp(deps: AppDependencies): (request: Request) => Promise<
       }
 
       if (path === '/v1/guest-sessions/upgrade' && request.method === 'POST') {
-        const { guest, clerk } = await resolveUpgrade(request, deps, now);
+        const { guest, clerk } = await resolveUpgrade(request, deps, now, requestId);
         checkRateLimit(deps.rateLimiter, `upgrade:${guest.sessionId}`, upgradeLimit, now);
         const idempotencyKey = parseIdempotencyKey(request.headers.get('idempotency-key'));
         parseUpgradeConsent(await readJsonBody(request));
@@ -198,14 +208,14 @@ export function createApp(deps: AppDependencies): (request: Request) => Promise<
       }
 
       if (path === '/v1/session' && request.method === 'GET') {
-        const actor = await resolveActor(request, deps, now);
+        const actor = await resolveActor(request, deps, now, requestId);
         return responseJson(requestId, 200, actor.type === 'signed-out'
           ? { actor: null, status: 'signed-out', capabilities: { persistentPreferences: false, canUpgrade: false, canDeletePreferences: false } }
           : { actor: actorPayload(actor), status: 'authenticated' });
       }
 
       if (path === '/v1/me/preferences' && ['GET', 'PATCH', 'DELETE'].includes(request.method)) {
-        const actor = requireActor(await resolveActor(request, deps, now));
+        const actor = requireActor(await resolveActor(request, deps, now, requestId));
         const owner = ownerFor(actor);
         if (request.method === 'GET') {
           return responseJson(requestId, 200, { actor: actorPayload(actor), preferences: publicPreferences(await deps.store.getPreferences(owner.ownerType, owner.ownerId)) });
@@ -219,7 +229,7 @@ export function createApp(deps: AppDependencies): (request: Request) => Promise<
       }
 
       if (path === '/v1/agent/stream' && request.method === 'POST') {
-        const actor = requireActor(await resolveActor(request, deps, now));
+        const actor = requireActor(await resolveActor(request, deps, now, requestId));
         if (!deps.agent) throw new AuthServiceError('not_configured');
         const actorId = actor.type === 'guest' ? actor.sessionId : actor.userId;
         checkRateLimit(deps.rateLimiter, `agent:actor:${actor.type}:${actorId}`, agentActorLimit, now);

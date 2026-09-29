@@ -114,6 +114,29 @@ test('expired guests cannot access protected routes', async () => {
   assert.equal(session.body.error.code, 'invalid_credentials');
 });
 
+test('invalid Clerk credentials log only a safe rejection diagnostic correlated to the response request ID', async () => {
+  const diagnostic = { outcome: 'not_authenticated', issuer: 'https://clerk.hashie.abrantepa.com', authorizedParty: 'https://clerk.hashie.abrantepa.com', keyId: 'kid_safe', configuredAuthorizedParties: ['https://clerk.hashie.abrantepa.com'] };
+  const messages = [];
+  const app = createApp({
+    store: new InMemoryDataStore(),
+    clerk: { async verifyBearerToken() { return { status: 'invalid', diagnostic }; } },
+    rateLimiter: new MemoryRateLimiter(),
+    requestId: () => 'req_clerk_diagnostic',
+  });
+  const originalWarn = console.warn;
+  console.warn = (...args) => messages.push(args);
+  try {
+    const { response, body } = await call(app, '/v1/session', { headers: { authorization: 'Bearer never-log-this-token' } });
+    assert.equal(response.status, 401);
+    assert.equal(body.error.code, 'invalid_credentials');
+    assert.equal(response.headers.get('x-request-id'), 'req_clerk_diagnostic');
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(messages, [['[Hashie auth] Clerk token rejected', { requestId: 'req_clerk_diagnostic', ...diagnostic }]]);
+  assert.doesNotMatch(JSON.stringify(messages), /never-log-this-token/);
+});
+
 test('agent stream requires an actor and passes only validated input to the server-owned agent', async () => {
   let received = null;
   const store = new InMemoryDataStore();

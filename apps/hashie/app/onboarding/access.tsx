@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { router } from 'expo-router';
 import { Platform, Text, View } from 'react-native';
 import { useAuth, useSSO } from '@clerk/expo';
@@ -8,21 +8,17 @@ import { OnboardingScreen } from '@/components/onboarding-screen';
 import { useOnboarding } from '@/components/onboarding-provider';
 import { useNativeGoogleSignIn } from '@/components/use-native-google-sign-in';
 import { colors, spacing, textStyles } from '@/constants/design-system';
-import { classifyNativeGoogleSignInError } from '@/lib/google-sign-in';
-import { postGoogleSignInAction } from '@/lib/post-google-sign-in';
+import { classifyNativeGoogleSignInError, withGoogleSignInTimeout } from '@/lib/google-sign-in';
+import { destinationAfterSignedInActivation } from '@/lib/post-google-sign-in';
 
 export default function AccessScreen() {
   const {
-    actor,
+    activateSignedInActor,
     beginGuestSession,
     clearSubmissionError,
-    hasGuestUpgradeAvailable,
-    hasSavedPreferences,
     isConnecting,
-    refreshSession,
     sessionError,
     sessionRecovery,
-    sessionStatus,
     signOutAccount,
     submissionError,
   } = useOnboarding();
@@ -34,29 +30,24 @@ export default function AccessScreen() {
   const [isAwaitingSessionActivation, setIsAwaitingSessionActivation] = useState(false);
   const isSubmitting = isConnecting || isGoogleConnecting || isAwaitingSessionActivation;
 
-  useEffect(() => {
-    if (!isAwaitingSessionActivation) return;
-    const action = postGoogleSignInAction({
-      isClerkLoaded,
-      isSignedIn: isSignedIn === true,
-      sessionStatus,
-      sessionRecovery,
-      actorType: actor?.type ?? null,
-      hasSavedPreferences,
-      hasGuestUpgradeAvailable,
-    });
-    if (action.type === 'wait') return;
-    setIsAwaitingSessionActivation(false);
-    if (action.type === 'error') {
-      setNotice(sessionError || 'Your signed-in session could not be activated. Please try again.');
-      return;
+  const activateGoogleSession = async (): Promise<boolean> => {
+    setIsAwaitingSessionActivation(true);
+    try {
+      const result = await activateSignedInActor();
+      const destination = destinationAfterSignedInActivation(result);
+      router.replace(destination === 'upgrade'
+        ? '/onboarding/upgrade'
+        : destination === 'tabs'
+          ? '/(tabs)'
+          : '/onboarding/language');
+      return true;
+    } catch {
+      // OnboardingProvider has set a safe, actor-specific error message.
+      return false;
+    } finally {
+      setIsAwaitingSessionActivation(false);
     }
-    router.replace(action.destination === 'upgrade'
-      ? '/onboarding/upgrade'
-      : action.destination === 'tabs'
-        ? '/(tabs)'
-        : '/onboarding/language');
-  }, [actor?.type, hasGuestUpgradeAvailable, hasSavedPreferences, isAwaitingSessionActivation, isClerkLoaded, isSignedIn, sessionError, sessionRecovery, sessionStatus]);
+  };
   const continueAsGuest = async () => {
     setNotice('');
     clearSubmissionError();
@@ -105,7 +96,7 @@ export default function AccessScreen() {
       if (needsFreshGoogleSignIn) {
         if (Platform.OS === 'ios' || Platform.OS === 'android') {
           try {
-            const { createdSessionId, setActive } = await startNativeGoogleSignIn();
+            const { createdSessionId, setActive } = await withGoogleSignInTimeout(startNativeGoogleSignIn(), 20_000);
             if (!createdSessionId) {
               // Clerk returns no session when the native picker is cancelled. Do not
               // turn this into browser SSO or an error state.
@@ -131,13 +122,12 @@ export default function AccessScreen() {
           setNotice('Google sign-in is not supported on this platform. Please continue as a guest.');
           return;
         }
-        // `setActive` updates Clerk outside this render. Wait for OnboardingProvider's
-        // Clerk-state effect to observe the new session before requesting the backend actor.
-        setIsAwaitingSessionActivation(true);
+        // Generic cold-start restoration deliberately preserves a saved guest actor.
+        // This path explicitly activates the Clerk session just selected with Google.
+        await activateGoogleSession();
         return;
       }
-      setIsAwaitingSessionActivation(true);
-      await refreshSession();
+      await activateGoogleSession();
     } catch {
       setNotice(sessionRecovery === 'clerk-expired'
         ? 'This account needs to sign out and sign in again before it can be used.'

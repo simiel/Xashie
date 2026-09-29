@@ -6,12 +6,62 @@ export type ClerkIdentity = {
   sessionId: string;
 };
 
+export type ClerkVerificationDiagnostic = {
+  outcome: 'not_authenticated' | 'verification_exception';
+  errorCode?: string;
+  issuer?: string;
+  authorizedParty?: string;
+  keyId?: string;
+  configuredAuthorizedParties: string[];
+};
+
 export type ClerkVerification =
   | { status: 'authenticated'; identity: ClerkIdentity }
-  | { status: 'invalid' };
+  | { status: 'invalid'; diagnostic?: ClerkVerificationDiagnostic };
 
 export interface ClerkVerifier {
   verifyBearerToken(token: string): Promise<ClerkVerification>;
+}
+
+function safeOrigin(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > 256) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeKeyId(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : undefined;
+}
+
+function safeErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const candidate = error as { code?: unknown; errors?: Array<{ code?: unknown }> };
+  const code = typeof candidate.code === 'string'
+    ? candidate.code
+    : typeof candidate.errors?.[0]?.code === 'string'
+      ? candidate.errors[0].code
+      : undefined;
+  return code && /^[a-z0-9_.:-]{1,128}$/i.test(code) ? code : undefined;
+}
+
+function safeTokenMetadata(token: string): Pick<ClerkVerificationDiagnostic, 'issuer' | 'authorizedParty' | 'keyId'> {
+  const [encodedHeader, encodedPayload] = token.split('.');
+  if (!encodedHeader || !encodedPayload || encodedHeader.length > 8_192 || encodedPayload.length > 8_192) return {};
+  try {
+    const header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8')) as { kid?: unknown };
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as { iss?: unknown; azp?: unknown };
+    return {
+      issuer: safeOrigin(payload.iss),
+      authorizedParty: safeOrigin(payload.azp),
+      keyId: safeKeyId(header.kid),
+    };
+  } catch {
+    return {};
+  }
 }
 
 export class UnavailableClerkVerifier implements ClerkVerifier {
@@ -43,12 +93,38 @@ export class ClerkBackendVerifier implements ClerkVerifier {
         acceptsToken: 'session_token',
         authorizedParties: this.authorizedParties.length > 0 ? this.authorizedParties : undefined,
       });
-      if (!requestState.isAuthenticated) return { status: 'invalid' };
+      if (!requestState.isAuthenticated) {
+        return {
+          status: 'invalid',
+          diagnostic: {
+            outcome: 'not_authenticated',
+            ...safeTokenMetadata(token),
+            configuredAuthorizedParties: this.authorizedParties,
+          },
+        };
+      }
       const auth = requestState.toAuth();
-      if (!auth.userId || !auth.sessionId) return { status: 'invalid' };
+      if (!auth.userId || !auth.sessionId) {
+        return {
+          status: 'invalid',
+          diagnostic: {
+            outcome: 'not_authenticated',
+            ...safeTokenMetadata(token),
+            configuredAuthorizedParties: this.authorizedParties,
+          },
+        };
+      }
       return { status: 'authenticated', identity: { userId: auth.userId, sessionId: auth.sessionId } };
-    } catch {
-      return { status: 'invalid' };
+    } catch (error) {
+      return {
+        status: 'invalid',
+        diagnostic: {
+          outcome: 'verification_exception',
+          errorCode: safeErrorCode(error),
+          ...safeTokenMetadata(token),
+          configuredAuthorizedParties: this.authorizedParties,
+        },
+      };
     }
   }
 }

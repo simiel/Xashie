@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { classifyNativeGoogleSignInError } = require('../.test-build/google-sign-in.js');
+const { GoogleSignInTimeoutError, classifyNativeGoogleSignInError, withGoogleSignInTimeout } = require('../.test-build/google-sign-in.js');
 
 test('native Google cancellation remains non-fatal', () => {
   assert.deepEqual(classifyNativeGoogleSignInError({ code: 'SIGN_IN_CANCELLED' }), {
@@ -24,4 +24,13 @@ test('unknown failures remain safe and actionable', () => {
   const result = classifyNativeGoogleSignInError(new Error('private provider detail'));
   assert.equal(result.diagnosticCode, 'GOOGLE_SIGN_IN_UNKNOWN');
   assert.doesNotMatch(result.notice, /private provider detail/);
+});
+
+test('a stalled native request becomes a safe retryable timeout', async () => {
+  await assert.rejects(withGoogleSignInTimeout(new Promise(() => {}), 1), GoogleSignInTimeoutError);
+  assert.deepEqual(classifyNativeGoogleSignInError(new GoogleSignInTimeoutError()), {
+    kind: 'timeout',
+    diagnosticCode: 'GOOGLE_SIGN_IN_TIMEOUT',
+    notice: 'Google sign-in is taking too long. Check your connection and try again.',
+  });
 });

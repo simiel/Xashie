@@ -3,6 +3,17 @@ export type PostGoogleSignInAction =
   | { type: 'route'; destination: 'onboarding' | 'tabs' | 'upgrade' }
   | { type: 'error' };
 
+export function destinationAfterSignedInActivation({
+  hasSavedPreferences,
+  guestUpgradeAvailable,
+}: {
+  hasSavedPreferences: boolean;
+  guestUpgradeAvailable: boolean;
+}): 'onboarding' | 'tabs' | 'upgrade' {
+  if (guestUpgradeAvailable) return 'upgrade';
+  return hasSavedPreferences ? 'tabs' : 'onboarding';
+}
+
 type SessionStatus = 'loading' | 'signed-out' | 'guest' | 'signed-in' | 'error';
 type SessionRecovery = 'none' | 'choose-actor' | 'guest-expired' | 'clerk-expired';
 
@@ -25,8 +36,13 @@ export function postGoogleSignInAction({
 }): PostGoogleSignInAction {
   if (!isClerkLoaded || !isSignedIn || sessionStatus === 'loading') return { type: 'wait' };
   if (sessionStatus === 'signed-in' && actorType === 'clerk-user') {
-    if (hasGuestUpgradeAvailable) return { type: 'route', destination: 'upgrade' };
-    return { type: 'route', destination: hasSavedPreferences ? 'tabs' : 'onboarding' };
+    return {
+      type: 'route',
+      destination: destinationAfterSignedInActivation({
+        hasSavedPreferences,
+        guestUpgradeAvailable: hasGuestUpgradeAvailable,
+      }),
+    };
   }
   if (sessionStatus === 'error' || sessionRecovery === 'clerk-expired') return { type: 'error' };
   return { type: 'wait' };

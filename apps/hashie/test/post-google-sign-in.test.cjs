@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { postGoogleSignInAction, sessionActivationDiagnostic } = require('../.test-build/post-google-sign-in.js');
+const { destinationAfterSignedInActivation, postGoogleSignInAction, sessionActivationDiagnostic } = require('../.test-build/post-google-sign-in.js');
 
 const signedInBase = {
   isClerkLoaded: true,
@@ -20,6 +20,12 @@ test('post-Google sign-in routes only after a Clerk actor is active', () => {
   assert.deepEqual(postGoogleSignInAction(signedInBase), { type: 'route', destination: 'onboarding' });
   assert.deepEqual(postGoogleSignInAction({ ...signedInBase, hasSavedPreferences: true }), { type: 'route', destination: 'tabs' });
   assert.deepEqual(postGoogleSignInAction({ ...signedInBase, hasGuestUpgradeAvailable: true }), { type: 'route', destination: 'upgrade' });
+});
+
+test('explicit signed-in activation prioritizes guest upgrade over normal routing', () => {
+  assert.equal(destinationAfterSignedInActivation({ hasSavedPreferences: false, guestUpgradeAvailable: true }), 'upgrade');
+  assert.equal(destinationAfterSignedInActivation({ hasSavedPreferences: true, guestUpgradeAvailable: false }), 'tabs');
+  assert.equal(destinationAfterSignedInActivation({ hasSavedPreferences: false, guestUpgradeAvailable: false }), 'onboarding');
 });
 
 test('post-Google sign-in exposes a session activation failure instead of treating it as a provider failure', () => {
