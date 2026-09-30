@@ -16,6 +16,7 @@ Make `apps/hashie` ready for reliable EAS Cloud builds, then create and deliver 
 - The effective local public config resolves with the expected application IDs, plugins, EAS project ID, and all four native Google sign-in values present. Values were not recorded in this prompt.
 - `npm run check:google-config` fails when invoked without Expo's local environment loading. This is expected locally but proves the four values must be configured in the selected EAS environment because the EAS pre-install hook requires them.
 - `preview` already targets an installable Android APK and uses the `preview` EAS environment. `appVersionSource` is remote.
+- The workstation's globally installed EAS CLI was 20.5.1 and produced a stale source archive during the first submissions. The approved project minimum is raised to 24.8.0; builds use that current CLI.
 - The generated `ios/` and `android/` folders are ignored, so EAS should use the managed/CNG configuration rather than local native build artifacts.
 
 ## Decisions
