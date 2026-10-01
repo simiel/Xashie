@@ -18,6 +18,7 @@ Use `X-Hashie-Guest-Token` for guest requests or `Authorization: Bearer <Clerk s
 Copy `.env.example` to a local environment and replace the obvious placeholders. The backend reads these variables:
 
 - `NODE_ENV`, `PORT` — local process mode and HTTP port.
+- `HASHIE_WEB_ALLOWED_ORIGINS` — comma-separated web origins that may call the API. Production defaults to `https://hashie.abrantepa.com`; do not use a wildcard.
 - `CLERK_SECRET_KEY` or `CLERK_JWT_KEY`, plus optional `CLERK_PUBLISHABLE_KEY` and `CLERK_AUTHORIZED_PARTIES` — server-side Clerk request verification.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — server-only persistence access. Never put the service-role key in the mobile app.
 - `HASHIE_DATA_STORE` and `HASHIE_ALLOW_INSECURE_MEMORY_STORE` — explicit local memory-store controls.
