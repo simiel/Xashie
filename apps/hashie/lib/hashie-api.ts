@@ -1,7 +1,7 @@
 import { randomUUID } from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
 
 import type { AccessibilityPreference, AgeGroup, Language } from '@/constants/onboarding';
+import { sessionCredentialStore } from '@/lib/session-credential-store';
 
 const guestTokenStorageKey = 'hashie.guest-session-token';
 const activeActorStorageKey = 'hashie.active-actor-choice';
@@ -200,32 +200,32 @@ export class HashieApiClient {
 
 export const hashieApi = new HashieApiClient();
 
-export function getGuestToken(): Promise<string | null> { return SecureStore.getItemAsync(guestTokenStorageKey); }
+export function getGuestToken(): Promise<string | null> { return sessionCredentialStore.getItem(guestTokenStorageKey); }
 export function saveGuestToken(token: string): Promise<void> {
-  return SecureStore.setItemAsync(guestTokenStorageKey, token, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+  return sessionCredentialStore.setItem(guestTokenStorageKey, token);
 }
 export function getStoredActorChoice(): Promise<StoredActorChoice | null> {
-  return SecureStore.getItemAsync(activeActorStorageKey).then((value) => value === 'guest' || value === 'clerk-user' ? value : null);
+  return sessionCredentialStore.getItem(activeActorStorageKey).then((value) => value === 'guest' || value === 'clerk-user' ? value : null);
 }
 export function saveStoredActorChoice(choice: StoredActorChoice): Promise<void> {
-  return SecureStore.setItemAsync(activeActorStorageKey, choice, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+  return sessionCredentialStore.setItem(activeActorStorageKey, choice);
 }
 export function clearStoredActorChoice(): Promise<void> {
-  return SecureStore.deleteItemAsync(activeActorStorageKey);
+  return sessionCredentialStore.removeItem(activeActorStorageKey);
 }
 export async function getGuestUpgradeIdempotencyKey(): Promise<string> {
-  const existing = await SecureStore.getItemAsync(guestUpgradeIdempotencyKeyStorageKey);
+  const existing = await sessionCredentialStore.getItem(guestUpgradeIdempotencyKeyStorageKey);
   if (existing) return existing;
   const key = randomUUID();
-  await SecureStore.setItemAsync(guestUpgradeIdempotencyKeyStorageKey, key, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+  await sessionCredentialStore.setItem(guestUpgradeIdempotencyKeyStorageKey, key);
   return key;
 }
 export function clearGuestUpgradeIdempotencyKey(): Promise<void> {
-  return SecureStore.deleteItemAsync(guestUpgradeIdempotencyKeyStorageKey);
+  return sessionCredentialStore.removeItem(guestUpgradeIdempotencyKeyStorageKey);
 }
 export async function clearGuestToken(): Promise<void> {
   await Promise.all([
-    SecureStore.deleteItemAsync(guestTokenStorageKey),
+    sessionCredentialStore.removeItem(guestTokenStorageKey),
     clearGuestUpgradeIdempotencyKey(),
   ]);
 }
